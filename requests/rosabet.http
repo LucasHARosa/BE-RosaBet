@@ -1,12 +1,12 @@
 ### RosaBet API — REST Client
 ### Extensão: REST Client (Huachao Mao)
-### Variáveis globais abaixo — atualize o token após fazer login
+### Após fazer login, copie o access_token e cole na variável @token abaixo
 
 @base = http://localhost:8000
 @token = SEU_TOKEN_AQUI
 
 # ==========================================
-# FASE 2 — Health Check
+# HEALTH CHECK
 # ==========================================
 
 ### Health Check
@@ -14,31 +14,37 @@ GET {{base}}/health
 
 
 # ==========================================
-# FASE 3 — Auth (disponível após Fase 3)
+# FASE 3 — Auth
 # ==========================================
 
-### Cadastro de usuário
-# POST {{base}}/client
-# Content-Type: application/json
-#
-# {
-#   "name": "Demo User",
-#   "email": "demo@rosabet.com",
-#   "username": "demo",
-#   "cpf": "00000000000",
-#   "password": "demo123",
-#   "phone": "11999999999"
-# }
+### Cadastro de novo usuário
+POST {{base}}/client
+Content-Type: application/json
 
-### Login
-# POST {{base}}/auth/login
-# Content-Type: application/x-www-form-urlencoded
-#
-# username=demo@rosabet.com&password=demo123
+{
+  "name": "Lucas Rosa",
+  "email": "lucas@rosabet.com",
+  "cpf": "12345678901",
+  "password": "senha123",
+  "phone": "11999999999"
+}
+
+###
+
+### Login com usuário demo (já existe ao subir em development)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo@rosabet.com",
+  "password": "demo123"
+}
+
+###
 
 ### Meu perfil (requer token)
-# GET {{base}}/user/me
-# Authorization: Bearer {{token}}
+GET {{base}}/user/me
+Authorization: Bearer {{token}}
 
 
 # ==========================================
@@ -95,8 +101,7 @@ GET {{base}}/health
 # Content-Type: application/json
 #
 # {
-#   "value": 100.00,
-#   "bonus_type": null
+#   "value": 100.00
 # }
 
 ### Listar depósitos
@@ -108,18 +113,8 @@ GET {{base}}/health
 # FASE 9 — Cassino
 # ==========================================
 
-### Tipos de jogos (destaques, novidades, etc.)
+### Tipos de jogos
 # GET {{base}}/casino/games_type
 
 ### Jogos por categoria
 # GET {{base}}/casino/games?type=slot
-
-### URL de jogo específico
-# POST {{base}}/pragmatic/game-url
-# Authorization: Bearer {{token}}
-# Content-Type: application/json
-#
-# {
-#   "game_code": "copa-do-mundo-slots",
-#   "platform": "desktop"
-# }
