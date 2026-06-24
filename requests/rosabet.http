@@ -1,0 +1,125 @@
+### RosaBet API — REST Client
+### Extensão: REST Client (Huachao Mao)
+### Variáveis globais abaixo — atualize o token após fazer login
+
+@base = http://localhost:8000
+@token = SEU_TOKEN_AQUI
+
+# ==========================================
+# FASE 2 — Health Check
+# ==========================================
+
+### Health Check
+GET {{base}}/health
+
+
+# ==========================================
+# FASE 3 — Auth (disponível após Fase 3)
+# ==========================================
+
+### Cadastro de usuário
+# POST {{base}}/client
+# Content-Type: application/json
+#
+# {
+#   "name": "Demo User",
+#   "email": "demo@rosabet.com",
+#   "username": "demo",
+#   "cpf": "00000000000",
+#   "password": "demo123",
+#   "phone": "11999999999"
+# }
+
+### Login
+# POST {{base}}/auth/login
+# Content-Type: application/x-www-form-urlencoded
+#
+# username=demo@rosabet.com&password=demo123
+
+### Meu perfil (requer token)
+# GET {{base}}/user/me
+# Authorization: Bearer {{token}}
+
+
+# ==========================================
+# FASE 4 — Eventos esportivos
+# ==========================================
+
+### Listar eventos abertos
+# GET {{base}}/sport/open
+
+
+# ==========================================
+# FASE 6 — Apostas
+# ==========================================
+
+### Criar aposta simples
+# POST {{base}}/bet
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {
+#   "value": 10.00,
+#   "spend_from": "credits",
+#   "accept_all_changes": false,
+#   "only_accept_high": false,
+#   "sports": [
+#     {
+#       "enet_code": "sr:match:10001",
+#       "market_id": 1,
+#       "odd_id": "1::1",
+#       "option_id": "1",
+#       "quotation": 1.85,
+#       "is_live": true,
+#       "specifier": null
+#     }
+#   ]
+# }
+
+### Listar minhas apostas
+# GET {{base}}/bet
+# Authorization: Bearer {{token}}
+
+### Detalhe de uma aposta
+# GET {{base}}/bet/ID_DA_APOSTA_AQUI
+# Authorization: Bearer {{token}}
+
+
+# ==========================================
+# FASE 8 — Depósito
+# ==========================================
+
+### Criar depósito PIX
+# POST {{base}}/deposit
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {
+#   "value": 100.00,
+#   "bonus_type": null
+# }
+
+### Listar depósitos
+# GET {{base}}/deposit
+# Authorization: Bearer {{token}}
+
+
+# ==========================================
+# FASE 9 — Cassino
+# ==========================================
+
+### Tipos de jogos (destaques, novidades, etc.)
+# GET {{base}}/casino/games_type
+
+### Jogos por categoria
+# GET {{base}}/casino/games?type=slot
+
+### URL de jogo específico
+# POST {{base}}/pragmatic/game-url
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {
+#   "game_code": "copa-do-mundo-slots",
+#   "platform": "desktop"
+# }
