@@ -58,38 +58,7 @@ pip install -r requirements.txt
 
 ---
 
-## 5. Instalar e configurar o PostgreSQL
-
-```bash
-# instalar
-brew install postgresql@16
-
-# iniciar o serviço (fica rodando em background)
-brew services start postgresql@16
-
-# criar usuário e banco de dados
-psql postgres -c "CREATE USER rosabet WITH PASSWORD 'rosabet123';"
-psql postgres -c "CREATE DATABASE rosabet OWNER rosabet;"
-```
-
-> Se o comando `psql` não for encontrado, adicione ao PATH:
-> ```bash
-> echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
-> source ~/.zshrc
-> ```
-
----
-
-## 6. Instalar e iniciar o Redis
-
-```bash
-brew install redis
-brew services start redis
-```
-
----
-
-## 7. Configurar o arquivo .env
+## 5. Configurar o arquivo .env
 
 Crie um arquivo `.env` na raiz do projeto:
 
@@ -111,38 +80,145 @@ ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
 ---
 
-## 8. Rodar as migrations (criar as tabelas no banco)
+## 6. Subir o banco e o Redis
+
+Escolha **uma** das duas opções abaixo. Ambas deixam PostgreSQL na porta 5432 e Redis na porta 6379 — o resto do projeto funciona igual.
+
+---
+
+### Opção A — Docker (recomendado)
+
+Banco e Redis rodam em containers, sem instalar nada diretamente no Mac.
+
+**Instale o Docker Desktop:**
+
+Baixe em [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) e confirme que está funcionando:
 
 ```bash
-alembic upgrade head
+docker --version
+docker compose version
 ```
 
-Você deve ver as 8 tabelas sendo criadas: `users`, `sport_events`, `markets`, `odds`, `bets`, `bet_items`, `transactions`, `casino_games`.
+**Suba os containers:**
 
-Para verificar:
 ```bash
-psql rosabet -c "\dt"
+make up
+```
+
+Os dados ficam em volumes — você pode parar e subir novamente sem perder nada.
+
+**Como parar:**
+
+```bash
+make down        # para os containers (mantém os dados)
+make reset       # para E apaga tudo (reset completo)
+```
+
+**Fluxo diário com Docker:**
+
+```bash
+make up      # subir banco + Redis
+make dev     # subir a API
+# Ctrl+C para parar a API
+make down    # parar banco + Redis
 ```
 
 ---
 
-## 9. Subir o servidor
+### Opção B — Homebrew (nativo no Mac)
+
+PostgreSQL e Redis instalados diretamente no macOS via brew. Sem Docker.
+
+**Instalar PostgreSQL 16:**
 
 ```bash
-uvicorn api.main:app --reload --port 8000
+brew install postgresql@16
+
+# adicionar ao PATH (necessário uma vez)
+echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# iniciar o serviço
+brew services start postgresql@16
 ```
 
-O servidor sobe em `http://localhost:8000`. O `--reload` reinicia automaticamente ao salvar qualquer arquivo `.py`.
+**Criar o banco e o usuário:**
 
-Para confirmar que está funcionando, acesse no browser ou via REST Client:
-```
-GET http://localhost:8000/health
+```bash
+psql postgres -c "CREATE USER rosabet WITH PASSWORD 'rosabet123';"
+psql postgres -c "CREATE DATABASE rosabet OWNER rosabet;"
 ```
 
-Resposta esperada:
-```json
-{ "status": "ok", "environment": "development" }
+**Instalar Redis:**
+
+```bash
+brew install redis
+brew services start redis
 ```
+
+**Verificar que está tudo rodando:**
+
+```bash
+brew services list
+```
+
+Você deve ver `postgresql@16` e `redis` com status `started`.
+
+**Como parar:**
+
+```bash
+brew services stop postgresql@16
+brew services stop redis
+```
+
+> Com brew, os serviços sobem automaticamente toda vez que você liga o Mac. Se não quiser isso, pare com `brew services stop` ao terminar e inicie manualmente com `brew services start` quando precisar.
+
+**Fluxo diário com Homebrew:**
+
+```bash
+brew services start postgresql@16   # se não estiver rodando
+brew services start redis            # se não estiver rodando
+source .venv/bin/activate
+make dev
+# Ctrl+C para parar a API
+```
+
+---
+
+## 7. Rodar as migrations (criar as tabelas)
+
+```bash
+make migrate
+```
+
+Cria as 8 tabelas: `users`, `sport_events`, `markets`, `odds`, `bets`, `bet_items`, `transactions`, `casino_games`.
+
+> Rode isso **uma vez** ao clonar o projeto. Só rode novamente quando houver novas migrations.
+
+---
+
+## 8. Subir a API
+
+```bash
+make dev
+```
+
+A API sobe em `http://localhost:8000` com reload automático — qualquer alteração em `.py` reinicia o servidor sozinho, igual ao `npm run start:dev` do NestJS.
+
+Para parar: **Ctrl+C** no terminal.
+
+---
+
+## Comparativo entre as opções
+
+| | Docker (Opção A) | Homebrew (Opção B) |
+|---|---|---|
+| Instalação | Docker Desktop | brew install |
+| Sobe com o Mac | Não (por padrão) | Sim (brew services) |
+| Múltiplos projetos | Um compose por projeto | Um único PostgreSQL compartilhado |
+| Reset do banco | `make reset` | `dropdb` + `createdb` |
+| Mais próximo de produção | ✅ | ❌ |
+| Mais simples de debugar | ❌ | ✅ |
 
 ---
 
@@ -170,14 +246,60 @@ Instale a extensão [REST Client](https://marketplace.visualstudio.com/items?ite
 
 ---
 
-## Serviços necessários em desenvolvimento
+## Múltiplos projetos com PostgreSQL (Opção B — Homebrew)
 
-| Serviço | Como verificar | Como iniciar |
-|---|---|---|
-| PostgreSQL | `brew services list` | `brew services start postgresql@16` |
-| Redis | `brew services list` | `brew services start redis` |
-| API | `curl localhost:8000/health` | `uvicorn api.main:app --reload --port 8000` |
-| Worker | — | `python worker/main.py` (disponível na Fase 5) |
+Você não precisa de uma instância separada do PostgreSQL por projeto. Um único processo serve todos:
+
+```bash
+psql postgres -c "CREATE USER outroprojeto WITH PASSWORD 'senha';"
+psql postgres -c "CREATE DATABASE outroprojeto OWNER outroprojeto;"
+```
+
+Cada projeto aponta para o seu banco no `.env`:
+```env
+DATABASE_URL=postgresql+asyncpg://outroprojeto:senha@localhost:5432/outroprojeto
+```
+
+---
+
+## Deploy em produção
+
+### Opção A — Railway / Render (mais fácil, sem VPS)
+
+1. Crie conta em [railway.app](https://railway.app) ou [render.com](https://render.com)
+2. Conecte seu repositório GitHub
+3. Adicione os serviços PostgreSQL e Redis pelo painel (eles provisionam automaticamente)
+4. Configure as variáveis do `.env` nas configurações do projeto
+5. A cada `git push`, eles fazem o build e deploy automaticamente
+
+### Opção B — VPS com Docker (DigitalOcean, Fly.io, etc.)
+
+Na VPS, após instalar Docker:
+
+```bash
+git clone https://github.com/seu-usuario/rosabet-api.git
+cd rosabet-api
+cp .env.example .env
+# editar .env com credenciais de produção (SECRET_KEY forte, ENVIRONMENT=production)
+
+docker compose up -d
+alembic upgrade head
+```
+
+---
+
+## Gerenciar portas
+
+```bash
+# ver se a porta 8000 está em uso
+lsof -i :8000
+
+# ver todas as portas em uso no momento
+lsof -i -P | grep LISTEN
+
+# matar o processo que estiver na porta 8000
+kill $(lsof -ti:8000)
+```
 
 ---
 
@@ -188,17 +310,26 @@ Instale a extensão [REST Client](https://marketplace.visualstudio.com/items?ite
 source .venv/bin/activate
 
 # gerar nova migration após alterar um model
-alembic revision --autogenerate -m "descricao da mudanca"
+make migration msg="descricao da mudanca"
 
 # aplicar migrations pendentes
-alembic upgrade head
+make migrate
+
+# acessar o banco via terminal (Docker)
+make psql
+
+# acessar o banco via terminal (Homebrew)
+psql rosabet
+
+# ver status dos containers (Docker)
+make status
+
+# ver logs dos containers (Docker)
+make logs
 
 # voltar uma migration
-alembic downgrade -1
+source .venv/bin/activate && alembic downgrade -1
 
 # ver migrations aplicadas
-alembic history
-
-# acessar o banco via terminal
-psql rosabet
+source .venv/bin/activate && alembic history
 ```
