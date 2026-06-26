@@ -51,8 +51,14 @@ Authorization: Bearer {{token}}
 # FASE 4 — Eventos esportivos
 # ==========================================
 
-### Listar eventos abertos
-# GET {{base}}/sport/open
+### Listar todos os eventos abertos (ao vivo + pré-jogo)
+GET {{base}}/sport/open
+
+###
+
+### Listar eventos ao vivo (filtra no cliente a partir do mesmo endpoint)
+# Dica: todos os eventos com is_live=true são os ao vivo
+GET {{base}}/sport/open
 
 
 # ==========================================

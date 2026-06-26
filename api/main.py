@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone, UTC
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from api.routers import auth, client
+from api.routers import auth, client, sport
 
 
 async def _seed_demo_user() -> None:
@@ -30,10 +32,250 @@ async def _seed_demo_user() -> None:
         print("seed: usuário demo criado — demo@rosabet.com / demo123")
 
 
+async def _seed_sport_events() -> None:
+    from infrastructure.database.session import AsyncSessionLocal
+    from infrastructure.database.models.sport_event import SportEvent, Market, Odd
+    import infrastructure.repositories.event_repository as event_repo
+
+    now = datetime.utcnow()  # naive UTC — compatível com DateTime sem timezone no model
+
+    events_data = [
+        # --- AO VIVO ---
+        {
+            "enet_code": "sr:match:10001",
+            "sport_type": "Soccer",
+            "championship": "Copa do Mundo 2026",
+            "championship_en": "FIFA World Cup 2026",
+            "country": "Internacional",
+            "country_en": "International",
+            "home_team": "Brasil",
+            "out_team": "Argentina",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "1st Half",
+            "played_time": "23'",
+            "home_score": 1,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=23),
+            "started_at": now - timedelta(minutes=23),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 1.85},
+                     {"option_id": "X", "name": "X", "value": 3.40},
+                     {"option_id": "2", "name": "2", "value": 4.20},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 2.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=2.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.90},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.90},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.75},
+                     {"option_id": "no", "name": "Não", "value": 2.05},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10002",
+            "sport_type": "Soccer",
+            "championship": "Premier League",
+            "championship_en": "Premier League",
+            "country": "Inglaterra",
+            "country_en": "England",
+            "home_team": "Manchester City",
+            "out_team": "Liverpool",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "2nd Half",
+            "played_time": "67'",
+            "home_score": 2,
+            "away_score": 2,
+            "scheduled_at": now - timedelta(minutes=67),
+            "started_at": now - timedelta(minutes=67),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 2.60},
+                     {"option_id": "X", "name": "X", "value": 2.40},
+                     {"option_id": "2", "name": "2", "value": 2.90},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 4.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=4.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.75},
+                     {"option_id": "under", "name": "Abaixo", "value": 2.05},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.30},
+                     {"option_id": "no", "name": "Não", "value": 3.50},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10003",
+            "sport_type": "Basketball",
+            "championship": "NBA",
+            "championship_en": "NBA",
+            "country": "Estados Unidos",
+            "country_en": "United States",
+            "home_team": "LA Lakers",
+            "out_team": "Boston Celtics",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "3rd Quarter",
+            "played_time": "3Q 5:42",
+            "home_score": 87,
+            "away_score": 79,
+            "scheduled_at": now - timedelta(minutes=50),
+            "started_at": now - timedelta(minutes=50),
+            "markets": [
+                {"market_id": 219, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "LA Lakers", "value": 1.65},
+                     {"option_id": "2", "name": "Boston Celtics", "value": 2.25},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 215.5", "name_pt": "Total de Pontos", "category": "MAIN",
+                 "specifier": "total=215.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.85},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.95},
+                 ]},
+            ],
+        },
+        # --- PRÉ-JOGO ---
+        {
+            "enet_code": "sr:match:10004",
+            "sport_type": "Tennis",
+            "championship": "Roland Garros 2026",
+            "championship_en": "Roland Garros 2026",
+            "country": "França",
+            "country_en": "France",
+            "home_team": "Rafael Nadal",
+            "out_team": "Novak Djokovic",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=2),
+            "markets": [
+                {"market_id": 186, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "Nadal", "value": 2.10},
+                     {"option_id": "2", "name": "Djokovic", "value": 1.75},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 3.5", "name_pt": "Total de Sets", "category": "MAIN",
+                 "specifier": "total=3.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.80},
+                     {"option_id": "under", "name": "Abaixo", "value": 2.00},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10005",
+            "sport_type": "Soccer",
+            "championship": "UEFA Champions League",
+            "championship_en": "UEFA Champions League",
+            "country": "Europa",
+            "country_en": "Europe",
+            "home_team": "PSG",
+            "out_team": "Real Madrid",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=4),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 2.40},
+                     {"option_id": "X", "name": "X", "value": 3.20},
+                     {"option_id": "2", "name": "2", "value": 2.90},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 2.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=2.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.85},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.95},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.45},
+                     {"option_id": "12", "name": "12", "value": 1.55},
+                     {"option_id": "X2", "name": "X2", "value": 1.60},
+                 ]},
+            ],
+        },
+    ]
+
+    async with AsyncSessionLocal() as db:
+        for data in events_data:
+            existing = await event_repo.get_by_enet_code(db, data["enet_code"])
+            if existing:
+                continue
+
+            event = SportEvent(
+                enet_code=data["enet_code"],
+                sport_type=data["sport_type"],
+                championship=data.get("championship"),
+                championship_en=data.get("championship_en"),
+                country=data.get("country"),
+                country_en=data.get("country_en"),
+                home_team=data.get("home_team"),
+                out_team=data.get("out_team"),
+                is_live=data["is_live"],
+                status=data["status"],
+                match_status=data.get("match_status"),
+                played_time=data.get("played_time"),
+                home_score=data.get("home_score", 0),
+                away_score=data.get("away_score", 0),
+                scheduled_at=data["scheduled_at"],
+                started_at=data.get("started_at"),
+                valid_odds=sum(len(m["odds"]) for m in data["markets"]),
+            )
+            db.add(event)
+            await db.flush()
+
+            for mdata in data["markets"]:
+                market = Market(
+                    event_id=event.id,
+                    market_id=mdata["market_id"],
+                    name=mdata["name"],
+                    name_pt=mdata.get("name_pt"),
+                    category=mdata.get("category", "MAIN"),
+                    specifier=mdata.get("specifier"),
+                    has_specifiers=mdata.get("has_specifiers", False),
+                )
+                db.add(market)
+                await db.flush()
+
+                for odata in mdata["odds"]:
+                    specifier_part = f"::{mdata['specifier']}" if mdata.get("specifier") else ""
+                    odd_id = f"{mdata['market_id']}{specifier_part}:{odata['option_id']}"
+                    db.add(Odd(
+                        market_id=market.id,
+                        event_id=event.id,
+                        odd_id=odd_id,
+                        option_id=odata["option_id"],
+                        name=odata["name"],
+                        value=odata["value"],
+                    ))
+
+        await db.commit()
+        print("seed: 5 eventos esportivos criados com mercados e odds")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.ENVIRONMENT == "development":
         await _seed_demo_user()
+        await _seed_sport_events()
     yield
 
 
@@ -53,6 +295,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(client.router)
+app.include_router(sport.router)
 
 
 @app.get("/health")

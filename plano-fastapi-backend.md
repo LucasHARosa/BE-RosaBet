@@ -1167,50 +1167,100 @@ FastAPI: serializa com UserResponse (sem password_hash), HTTP 200
 
 ---
 
-### Fase 4 — Eventos esportivos (seed + API)
+### Fase 4 — Eventos esportivos (seed + API) ✅
 
 **Objetivo:** ter partidas com mercados e odds no banco, e a rota `/sport/open` retornando dados que o frontend consegue renderizar.
 
-**O que fazer:**
+**Status:** concluída. 5 eventos no banco, endpoint `/sport/open` respondendo no formato GameProps completo.
 
-1. Criar seed com 5 partidas (3 ao vivo + 2 pré-jogo) com odds iniciais realistas
-2. Implementar `infrastructure/repositories/event_repository.py`
-3. Implementar `GET /sport/open` — retorna lista de eventos com `reduced_markets`
+---
 
-**Estrutura do seed (exemplo):**
-```python
-events = [
-    {
-        "enet_code": "sr:match:10001",
-        "sport_type": "Soccer",
-        "championship": "Copa do Mundo 2026",
-        "home_team": "Brasil", "out_team": "Argentina",
-        "is_live": True, "match_status": "1st Half", "played_time": "23'",
-        "home_score": 1, "away_score": 0,
-        "markets": [
-            {
-                "market_id": 1, "name": "1x2", "category": "MAIN",
-                "odds": [
-                    {"option_id": "1", "name": "1", "value": 1.85},
-                    {"option_id": "X", "name": "X", "value": 3.20},
-                    {"option_id": "2", "name": "2", "value": 4.50},
-                ]
-            },
-            {
-                "market_id": 5, "name": "Over/Under 2.5", "category": "MAIN",
-                "specifier": "total=2.5",
-                "odds": [
-                    {"option_id": "over", "name": "Acima", "value": 1.90},
-                    {"option_id": "under", "name": "Abaixo", "value": 1.90},
-                ]
-            },
-        ]
-    },
-    # ... mais 4 eventos
-]
+#### O que foi criado e por quê
+
+**`infrastructure/repositories/event_repository.py`**
+
+Único arquivo que executa SQL relacionado a eventos. Funções principais:
+
+| Função | O que faz |
+|---|---|
+| `get_open_events(db)` | SELECT eventos que não estão FINISHED nem CANCELLED, já carregando markets e odds via selectinload |
+| `get_by_enet_code(db, enet_code)` | Busca um evento específico pelo código do Sportradar |
+| `get_live_events(db)` | Só eventos com status=LIVE (usado pelo worker na Fase 5) |
+| `bulk_update_odds(db, updates)` | Atualiza valor de várias odds de uma vez (usado pelo worker na Fase 5) |
+| `finish_event(db, event_id, home, away)` | Marca evento como FINISHED com placar final |
+
+O `selectinload` carrega os relacionamentos (markets → odds) em queries separadas mas eficientes, em vez de JOINs que gerariam linhas duplicadas.
+
+---
+
+**`application/use_cases/sport/get_open_events.py`**
+
+Converte os modelos SQLAlchemy para o formato `GameProps` que o frontend TypeScript consome. Três funções auxiliares + o use case:
+
+| Função | O que faz |
+|---|---|
+| `_odd_to_dict(odd)` | Converte `Odd` (ORM) → `OddProps` (frontend): renomeia `value` → `odd`, `odd_id` → `hash`, `option_id` → `optionId` |
+| `_compress_markets(markets)` | Serializa todos os mercados em JSON e comprime com `zlib.compress()` → base64. O Python `zlib.compress()` gera o mesmo formato zlib que o `pako.inflate()` do frontend descomprime |
+| `event_to_game_props(event)` | Monta o objeto `GameProps` completo: `_id` (estilo MongoDB fake), `__t` = sport_type, `reduced_markets` com as odds principais, `markets` = string comprimida com todos os mercados |
+
+**Por que comprimir o campo `markets`?** O frontend original recebia do Sportradar os dados comprimidos em pako para economizar largura de banda no WebSocket. O backend FastAPI precisa gerar a mesma compressão para ser compatível com `decompressString()` no `useGame.tsx`.
+
+---
+
+**`api/routers/sport.py`**
+
+Um único endpoint: `GET /sport/open` que retorna `GameProps[]` com eventos ao vivo primeiro (ordenado por `is_live DESC, scheduled_at ASC`).
+
+---
+
+**Seed em `api/main.py` — `_seed_sport_events()`**
+
+Cria 5 eventos com odds realistas ao subir em `development`:
+
+| Evento | Tipo | Status | Mercados |
+|---|---|---|---|
+| Brasil vs Argentina | Soccer | AO VIVO (1st Half, 23') | 1x2, Over/Under 2.5, Ambas Marcam |
+| Manchester City vs Liverpool | Soccer | AO VIVO (2nd Half, 67') | 1x2, Over/Under 4.5, Ambas Marcam |
+| LA Lakers vs Boston Celtics | Basketball | AO VIVO (3rd Quarter) | Match Winner, Over/Under 215.5 |
+| Nadal vs Djokovic | Tennis | PRÉ-JOGO (+2h) | Match Winner, Over/Under Sets |
+| PSG vs Real Madrid | Soccer | PRÉ-JOGO (+4h) | 1x2, Over/Under 2.5, Double Chance |
+
+O seed é idempotente — verifica `get_by_enet_code()` antes de inserir, então rodar o servidor múltiplas vezes não duplica dados.
+
+---
+
+#### Fluxo completo: `GET /sport/open`
+
+```
+Cliente: GET /sport/open
+    ↓
+api/routers/sport.py: instancia GetOpenEventsUseCase(db)
+    ↓
+application/use_cases/sport/get_open_events.py:
+    → event_repo.get_open_events(db)
+         ↓ SELECT sport_events WHERE status NOT IN (FINISHED, CANCELLED)
+         ↓ selectinload → SELECT markets WHERE event_id IN (...)
+         ↓ selectinload → SELECT odds WHERE market_id IN (...)
+         ↓ retorna 5 SportEvent com markets e odds já carregados
+    → para cada event: event_to_game_props(event)
+         ↓ _compress_markets → zlib.compress → base64 → campo "markets"
+         ↓ monta reduced_markets com OddProps no formato do frontend
+         ↓ monta _id fake, __t = sport_type, scores, status, etc.
+    → retorna GameProps[]
+    ↓
+FastAPI: serializa como JSON, HTTP 200
+    ↓
+Cliente recebe: [{__t: "Soccer", enet_code: "sr:match:10001", reduced_markets: [...], markets: "eJy...", ...}, ...]
 ```
 
-**Testar:** abrir `http://localhost:3000/live` no frontend — deve listar as partidas.
+---
+
+**Testar com REST Client** — abrir `requests/rosabet.http`:
+1. Clicar em **Send Request** no `GET /sport/open`
+2. Verificar que retorna 5 eventos com `reduced_markets` e odds
+3. O campo `markets` é uma string base64 — o frontend descomprime com pako
+
+**Testar no frontend** — aponte `NEXT_PUBLIC_SOCKET_URL` para `ws://localhost:8000` e abra `/live`. Como o frontend usa WebSocket para receber eventos (não HTTP), os cards só vão aparecer quando a Fase 5 (WebSocket) estiver pronta. O endpoint HTTP é usado pelo sitemap.
 
 ---
 
