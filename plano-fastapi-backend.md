@@ -867,439 +867,430 @@ O projeto `BE-RosaBet` já tem a estrutura de pastas criada. As fases abaixo seg
 
 ### Fase 2 — Config + Banco de dados ✅
 
-**Objetivo:** conectar a API no PostgreSQL e ter todas as tabelas criadas e versionadas via Alembic.
+**Objetivo:** conectar a API no PostgreSQL e ter todas as tabelas criadas.
 
-**Status:** concluída. As 8 tabelas estão no banco e o servidor responde em `GET /health`.
-
----
-
-#### O que foi criado e por quê
-
-**`.env`**
-
-Arquivo de configuração local que nunca vai para o git. Contém as credenciais de banco, a chave secreta do JWT, a URL do Redis e parâmetros de comportamento do sistema (intervalo de atualização de odds, tempo para gerar resultado, etc.). O `.env.example` é a versão sem valores reais que vai para o repositório, para que outros desenvolvedores saibam quais variáveis precisam configurar.
-
-**`config.py`**
-
-Lê o `.env` via Pydantic Settings e expõe um objeto `settings` tipado. Qualquer arquivo do projeto que precise de configuração importa `settings` daqui — nunca lê `os.environ` diretamente. Se uma variável obrigatória estiver faltando, a aplicação não sobe e mostra exatamente qual variável está faltando.
-
-**`infrastructure/database/base.py`**
-
-Define o `Base`, que é a classe pai de todos os models SQLAlchemy. Ele mantém um registro interno (`metadata`) de todas as tabelas que foram declaradas. O Alembic lê esse `metadata` para saber quais tabelas criar ou alterar nas migrations.
-
-**`infrastructure/database/session.py`**
-
-Cria dois objetos fundamentais:
-- `engine` — a conexão física com o PostgreSQL, configurada para rodar de forma assíncrona (`asyncpg`). Em desenvolvimento, loga todas as queries SQL no terminal para facilitar o debug.
-- `get_db()` — uma função geradora assíncrona que abre uma sessão de banco, injeta nos endpoints via `Depends()` do FastAPI, e fecha a sessão automaticamente ao final da requisição, mesmo em caso de erro.
-
-**`infrastructure/database/models/`**
-
-Cinco arquivos que mapeiam as tabelas do banco em classes Python (ORM). Cada campo da classe vira uma coluna SQL. O SQLAlchemy cuida de converter tipos Python (str, int, float, UUID, datetime) para os tipos correspondentes do PostgreSQL (VARCHAR, INTEGER, NUMERIC, UUID, TIMESTAMP). Os `relationship()` definem as associações entre tabelas sem precisar escrever JOINs manualmente.
-
-| Arquivo | Classes | Tabelas |
-|---|---|---|
-| `models/user.py` | `User` | `users` |
-| `models/sport_event.py` | `SportEvent`, `Market`, `Odd` | `sport_events`, `markets`, `odds` |
-| `models/bet.py` | `Bet`, `BetItem` | `bets`, `bet_items` |
-| `models/transaction.py` | `Transaction` | `transactions` |
-| `models/casino_game.py` | `CasinoGame` | `casino_games` |
-
-**`infrastructure/database/models/__init__.py`**
-
-Importa todas as classes de models em um só lugar. Isso garante que quando o Alembic carrega o `Base.metadata`, todos os models já estão registrados — sem esse arquivo, o `alembic revision --autogenerate` não enxergaria as tabelas.
-
-**`api/main.py`**
-
-App FastAPI com CORS configurado (aceita requisições do frontend em `localhost:3000`) e um endpoint `GET /health` para confirmar que a API está no ar. O `lifespan` é o lugar onde, nas próximas fases, vão entrar inicializações como a conexão com Redis e o seed de dados de desenvolvimento.
+**Status:** concluída. 8 tabelas no banco, servidor responde em `GET /health`.
 
 ---
 
-#### O que o Alembic cria automaticamente
+#### Arquivos criados
 
-O Alembic é o sistema de versionamento do banco de dados. Ele funciona em dois passos:
-
-**`alembic revision --autogenerate -m "init tables"`**
-Compara o estado atual do banco (vazio) com o que os models declaram e gera um arquivo Python em `alembic/versions/` contendo os comandos SQL de criação de tabelas. Esse arquivo é versionado no git — serve como histórico de todas as mudanças de schema do projeto.
-
-**`alembic upgrade head`**
-Executa os arquivos de versão pendentes e aplica as mudanças no banco. Criou as 9 tabelas (8 de negócio + `alembic_version`, que é a tabela de controle interna do Alembic para saber qual versão o banco está).
-
-Sempre que um model for alterado no futuro (adicionar uma coluna, mudar um tipo), o ciclo se repete:
-```bash
-alembic revision --autogenerate -m "descricao da mudanca"
-alembic upgrade head
+```
+.env                                   ← credenciais locais (não vai pro git)
+config.py                              ← lê o .env e expõe objeto settings tipado
+infrastructure/database/
+    base.py                            ← classe Base que todos os models herdam
+    session.py                         ← engine + get_db() injetado nos endpoints
+    models/
+        user.py                        ← tabela users
+        sport_event.py                 ← tabelas sport_events, markets, odds
+        bet.py                         ← tabelas bets, bet_items
+        transaction.py                 ← tabela transactions
+        casino_game.py                 ← tabela casino_games
+        __init__.py                    ← importa todos os models (necessário pro Alembic)
+api/main.py                            ← app FastAPI + CORS + GET /health
+requests/rosabet.http                  ← arquivo de testes (REST Client do VSCode)
 ```
 
----
+**Por que `__init__.py` nos models?** O Alembic precisa que todos os models estejam importados antes de gerar a migration. Sem esse arquivo, ele não enxerga as tabelas.
 
-#### Arquivo `requests/rosabet.http`
-
-Criado junto com a Fase 2 para ser usado ao longo de todo o projeto. É o arquivo da extensão REST Client do VSCode — funciona como um Postman embutido no editor. Contém todas as rotas organizadas por fase, com as das fases futuras comentadas. Conforme cada fase for implementada, basta descomentar o bloco correspondente.
+**Por que `get_db()` em vez de criar a sessão direto?** O FastAPI injeta a sessão via `Depends(get_db)` — isso garante que a sessão é fechada automaticamente ao final da requisição, mesmo em caso de erro.
 
 ---
 
-**Testar a Fase 2:**
+#### Fluxo: subir o servidor pela primeira vez
 
+**Etapa 1 — Criar as tabelas**
 ```bash
-# subir o servidor
-source .venv/bin/activate
-uvicorn api.main:app --reload --port 8000
+make migrate
+# executa: alembic upgrade head
+# cria as 8 tabelas + alembic_version (controle de versão do banco)
 ```
 
-Abrir `requests/rosabet.http` e clicar em **Send Request** no `GET /health`. Resposta esperada:
+**Etapa 2 — Subir a API**
+```bash
+make dev
+# executa: uvicorn api.main:app --reload --port 8000
+```
+
+**Etapa 3 — Testar**
+
+Abrir `requests/rosabet.http` e clicar em Send Request no `GET /health`. Resposta esperada:
 ```json
 { "status": "ok", "environment": "development" }
 ```
 
-Verificar tabelas no banco:
+**Adicionar ou alterar tabelas no futuro:**
 ```bash
-psql rosabet -c "\dt"
-# deve listar as 9 tabelas (8 + alembic_version)
+# 1. editar o model em infrastructure/database/models/
+# 2. gerar a migration
+make migration msg="descricao da mudanca"
+# 3. aplicar
+make migrate
 ```
 
 ---
 
 ### Fase 3 — Auth (Login + Cadastro) ✅
 
-**Objetivo:** usuário consegue se registrar, fazer login e receber um JWT válido para acessar rotas protegidas.
+**Objetivo:** usuário consegue se registrar, fazer login e receber um JWT para acessar rotas protegidas.
 
-**Rotas implementadas:**
-- `POST /client` — cadastro de novo usuário
-- `POST /auth/login` — retorna `{ access_token, token_type: "bearer" }`
-- `GET /user/me` — retorna dados do usuário autenticado (requer `Authorization: Bearer <token>`)
+**Status:** concluída. Rotas `POST /client`, `POST /auth/login` e `GET /user/me` funcionando.
 
 ---
 
-#### Arquivos criados e o que cada um faz
-
-**`domain/services/auth_rules.py`**
-
-A camada mais interna — zero dependência de banco ou HTTP. Quatro funções puras:
-
-| Função | O que faz | Usa |
-|---|---|---|
-| `hash_password(plain)` | Transforma `"demo123"` em `"$2b$12$..."` | `bcrypt.hashpw()` |
-| `verify_password(plain, hashed)` | Compara senha digitada com hash do banco | `bcrypt.checkpw()` |
-| `create_access_token(user_id)` | Cria JWT assinado com `SECRET_KEY`, expira em 7 dias | `python-jose` |
-| `decode_token(token)` | Valida assinatura + expiração, retorna `user_id` | `python-jose` |
-
-O bcrypt nunca descriptografa — ele recalcula o hash com o salt embutido e compara. Dois hashes da mesma senha são sempre diferentes (salt aleatório), o que impede ataques de dicionário.
-
----
-
-**`infrastructure/repositories/user_repository.py`**
-
-Único arquivo que executa SQL relacionado a usuários. Recebe sempre uma `AsyncSession` como parâmetro (injetada pelo FastAPI, nunca cria a própria conexão).
-
-| Função | SQL executado |
-|---|---|
-| `get_by_email(db, email)` | `SELECT * FROM users WHERE email = $1` |
-| `get_by_cpf(db, cpf)` | `SELECT * FROM users WHERE cpf = $1` |
-| `get_by_id(db, user_id)` | `SELECT * FROM users WHERE id = $1` |
-| `create(db, user)` | `INSERT INTO users ... RETURNING ...` |
-| `update(db, user)` | `COMMIT` (o objeto já foi modificado em memória) |
-| `debit(db, user_id, value, from_field)` | Subtrai `value` do campo `credits`, `sports_bonus` ou `casino_credits` |
-| `credit(db, user_id, value, to_field)` | Soma `value` no campo correspondente |
-
-Não conhece regras de negócio — não sabe se o saldo vai ficar negativo, não valida email. Apenas persiste o que recebe.
-
----
-
-**`application/schemas/auth.py`**
-
-Contratos Pydantic para a rota de login:
-
-- `LoginRequest` — `{ username: str, password: str }` — o que o cliente manda
-- `TokenResponse` — `{ access_token: str, token_type: "bearer" }` — o que a API devolve
-
-O Pydantic valida automaticamente os tipos antes do código do use case rodar. Se `username` vier como número, a API retorna `422 Unprocessable Entity` sem chamar nenhuma linha de código do use case.
-
----
-
-**`application/schemas/client.py`**
-
-Contratos para cadastro e exibição de usuário:
-
-- `RegisterRequest` — campos do formulário de cadastro. Tem dois validadores automáticos:
-  - CPF: remove caracteres não-numéricos e exige exatamente 11 dígitos
-  - Nome: remove espaços extras e exige mínimo 3 caracteres
-- `UserResponse` — dados que a API expõe do usuário (nunca expõe `password_hash`). `model_config = {"from_attributes": True}` permite construir o schema direto de um objeto SQLAlchemy sem conversão manual.
-
----
-
-**`application/use_cases/auth/login.py` — `LoginUseCase`**
-
-Orquestra o fluxo de login. Chama o repository e o domain:
+#### Arquivos criados
 
 ```
-LoginUseCase.execute(data: LoginRequest)
-  │
-  ├── user_repo.get_by_email(db, data.username)
-  │     └── se não encontrou → 401 (mensagem genérica, não revela se email existe)
-  │
-  ├── auth_rules.verify_password(data.password, user.password_hash)
-  │     └── se senha errada → 401
-  │
-  ├── verifica user.active e user.self_excluded → 403 se bloqueado
-  │
-  └── auth_rules.create_access_token(str(user.id))
-        └── retorna TokenResponse
-```
-
-A mensagem `"Email ou senha inválidos"` é intencional para os dois casos (email não existe / senha errada) — não revela qual dos dois falhou, o que dificulta enumeração de usuários.
-
----
-
-**`application/use_cases/auth/register.py` — `RegisterUseCase`**
-
-Orquestra o cadastro:
-
-```
-RegisterUseCase.execute(data: RegisterRequest)
-  │
-  ├── user_repo.get_by_email(db, data.email)
-  │     └── se já existe → 409 Conflict, code 1010
-  │
-  ├── user_repo.get_by_cpf(db, data.cpf)
-  │     └── se já existe → 409 Conflict, code 1011
-  │
-  ├── gera username a partir do email se não fornecido
-  │     ("lucas@rosabet.com" → "lucas")
-  │
-  ├── auth_rules.hash_password(data.password)
-  │     └── nunca salva senha em texto puro
-  │
-  └── user_repo.create(db, User(...))
-        └── retorna UserResponse
+domain/services/auth_rules.py          ← funções puras: hash senha, verificar, criar JWT, decodificar JWT
+infrastructure/repositories/
+    user_repository.py                 ← SQL: buscar por email/cpf/id, criar, debitar, creditar
+application/schemas/
+    auth.py                            ← formato do body de login (LoginRequest) e da resposta (TokenResponse)
+    client.py                          ← formato do body de cadastro (RegisterRequest) e do usuário (UserResponse)
+application/use_cases/auth/
+    login.py                           ← orquestra o fluxo de login
+    register.py                        ← orquestra o fluxo de cadastro
+api/
+    dependencies.py                    ← porteiro: valida token antes de qualquer rota protegida
+    routers/auth.py                    ← endpoints POST /auth/login e GET /user/me
+    routers/client.py                  ← endpoint POST /client
 ```
 
 ---
 
-**`api/dependencies.py` — `get_current_user`**
+#### Fluxo: `POST /auth/login`
 
-O porteiro de todas as rotas protegidas. É uma **dependency function** do FastAPI — qualquer endpoint que declare `Depends(get_current_user)` passa por aqui antes de executar:
+**Etapa 1 — Request chega no router**
 
+`api/routers/auth.py` recebe o body. O FastAPI usa `LoginRequest` de `application/schemas/auth.py` para validar os campos. Se vier algo errado, retorna 422 antes de executar qualquer código.
+
+**Etapa 2 — Router chama o use case**
+
+`api/routers/auth.py` → `LoginUseCase(db).execute(data)`
+
+O router não faz mais nada além disso.
+
+**Etapa 3 — Use case busca o usuário**
+
+`application/use_cases/auth/login.py` → `user_repository.get_by_email(db, email)`
+
+`infrastructure/repositories/user_repository.py` executa:
+```sql
+SELECT * FROM users WHERE email = 'demo@rosabet.com'
 ```
-Requisição chega com header: Authorization: Bearer eyJhbGci...
-  │
-  ├── oauth2_scheme extrai o token do header automaticamente
-  │
-  ├── auth_rules.decode_token(token)
-  │     └── valida assinatura e expiração → extrai user_id
-  │     └── se inválido → 401, o endpoint nem executa
-  │
-  └── user_repo.get_by_id(db, user_id)
-        └── se não encontrou ou inativo → 401
-        └── se ok → devolve objeto User para o endpoint usar
-```
+Retorna o objeto `User` (com `password_hash`) ou `None`. Se `None` → 401.
 
-`OAuth2PasswordBearer(tokenUrl="/auth/login")` serve para o FastAPI saber onde o token é obtido — aparece automaticamente na documentação interativa em `/docs`.
+**Etapa 4 — Use case verifica a senha**
 
----
+`application/use_cases/auth/login.py` → `auth_rules.verify_password(senha_digitada, hash_do_banco)`
 
-**`api/routers/auth.py` e `api/routers/client.py`**
+`domain/services/auth_rules.py` usa bcrypt para comparar. Se não bater → 401.
 
-Os routers são intencionalmente finos. Cada endpoint faz exatamente três coisas:
-1. Declara a rota e injeta dependências (`Depends(get_db)`, `Depends(get_current_user)`)
-2. Instancia o use case com a sessão de banco
-3. Chama `.execute()` e retorna o resultado
+> A mensagem é sempre `"Email ou senha inválidos"` para os dois casos (email não existe / senha errada) — não revela qual falhou.
 
-Sem lógica de negócio, sem SQL, sem manipulação de JWT. Tudo isso está nas camadas abaixo.
+**Etapa 5 — Use case gera o token**
 
----
+`application/use_cases/auth/login.py` → `auth_rules.create_access_token(user_id)`
 
-**`api/main.py` — seed do usuário demo**
+`domain/services/auth_rules.py` cria um JWT assinado com `SECRET_KEY`, válido por 7 dias.
 
-`_seed_demo_user()` roda dentro do `lifespan`, que executa uma vez ao subir o servidor antes de aceitar requisições. Cria `demo@rosabet.com` com `R$ 1.000,00` de crédito se ainda não existir. Roda só quando `ENVIRONMENT=development`.
+**Etapa 6 — Resposta volta**
 
----
-
-#### Fluxo completo: `POST /auth/login`
-
-```
-Cliente: POST /auth/login  { "username": "demo@rosabet.com", "password": "demo123" }
-    ↓
-FastAPI: valida body com LoginRequest (Pydantic) → ok
-    ↓
-api/routers/auth.py: instancia LoginUseCase(db) e chama .execute(data)
-    ↓
-application/use_cases/auth/login.py:
-    → user_repo.get_by_email(db, "demo@rosabet.com")
-         ↓ SELECT FROM users WHERE email = 'demo@rosabet.com'
-         ↓ retorna objeto User com password_hash
-    → auth_rules.verify_password("demo123", "$2b$12$...")  → True
-    → auth_rules.create_access_token("64ae052d-...")
-         ↓ JWT: { sub: "64ae052d-...", exp: agora+7dias }, assinado com SECRET_KEY
-         ↓ retorna "eyJhbGci..."
-    → retorna TokenResponse
-    ↓
-FastAPI: serializa com TokenResponse, HTTP 200
-    ↓
-Cliente recebe: { "access_token": "eyJhbGci...", "token_type": "bearer" }
-```
-
-#### Fluxo completo: `GET /user/me`
-
-```
-Cliente: GET /user/me   Authorization: Bearer eyJhbGci...
-    ↓
-FastAPI: oauth2_scheme extrai token do header
-    ↓
-api/dependencies.py: get_current_user(token, db)
-    → auth_rules.decode_token("eyJhbGci...")  → "64ae052d-..."
-    → user_repo.get_by_id(db, "64ae052d-...")
-         ↓ SELECT FROM users WHERE id = '64ae052d-...'
-         ↓ retorna objeto User
-    ↓
-api/routers/auth.py: endpoint me() recebe User pronto, devolve direto
-    ↓
-FastAPI: serializa com UserResponse (sem password_hash), HTTP 200
+Use case retorna `TokenResponse` → router devolve HTTP 200:
+```json
+{ "access_token": "eyJhbGci...", "token_type": "bearer" }
 ```
 
 ---
 
-**Testar com REST Client** — abrir `requests/rosabet.http`:
-1. Clicar em **Send Request** no `POST /auth/login`
+#### Fluxo: `GET /user/me` (rota protegida)
+
+**Etapa 1 — Request chega com token**
+```
+GET /user/me
+Authorization: Bearer eyJhbGci...
+```
+
+**Etapa 2 — FastAPI passa pelo porteiro antes do endpoint**
+
+Todo endpoint com `Depends(get_current_user)` passa por `api/dependencies.py` primeiro.
+
+**Etapa 3 — Porteiro valida o token**
+
+`api/dependencies.py` → `auth_rules.decode_token(token)`
+
+`domain/services/auth_rules.py` verifica assinatura e expiração, extrai o `user_id`. Se inválido → 401, o endpoint nem executa.
+
+**Etapa 4 — Porteiro busca o usuário**
+
+`api/dependencies.py` → `user_repository.get_by_id(db, user_id)`
+
+```sql
+SELECT * FROM users WHERE id = 'uuid-aqui'
+```
+
+**Etapa 5 — Endpoint recebe o usuário pronto**
+
+`api/routers/auth.py` recebe o objeto `User` já validado, sem fazer mais nada. O FastAPI serializa com `UserResponse` (que omite `password_hash`) e devolve HTTP 200.
+
+---
+
+#### Fluxo: `POST /client` (cadastro)
+
+**Etapa 1** — `api/routers/client.py` recebe o body, valida com `RegisterRequest`.
+
+**Etapa 2** — `RegisterUseCase(db).execute(data)`
+
+**Etapa 3** — `user_repository.get_by_email` → se já existe → 409 (code 1010)
+
+**Etapa 4** — `user_repository.get_by_cpf` → se já existe → 409 (code 1011)
+
+**Etapa 5** — `auth_rules.hash_password(senha)` → nunca salva senha em texto puro
+
+**Etapa 6** — `user_repository.create(db, User(...))` → INSERT no banco → retorna `UserResponse`
+
+---
+
+#### Seed: usuário demo
+
+`api/main.py` roda `_seed_demo_user()` ao subir em `development`. Cria `demo@rosabet.com / demo123` com R$ 1.000,00 de crédito se ainda não existir.
+
+---
+
+#### Como testar
+
+Abrir `requests/rosabet.http`:
+1. Send Request em `POST /auth/login`
 2. Copiar o `access_token` da resposta
 3. Colar na variável `@token` no topo do arquivo
-4. Clicar em **Send Request** no `GET /user/me`
+4. Send Request em `GET /user/me`
 
 ---
 
 ### Fase 4 — Eventos esportivos (seed + API) ✅
 
-**Objetivo:** ter partidas com mercados e odds no banco, e a rota `/sport/open` retornando dados que o frontend consegue renderizar.
+**Objetivo:** ter partidas com mercados e odds no banco, e a rota `GET /sport/open` retornando dados que o frontend renderiza.
 
-**Status:** concluída. 5 eventos no banco, endpoint `/sport/open` respondendo no formato GameProps completo.
+**Status:** concluída. 5 eventos no banco, endpoint respondendo no formato `GameProps` completo.
 
 ---
 
-#### O que foi criado e por quê
+#### Arquivos criados
 
-**`infrastructure/repositories/event_repository.py`**
+```
+infrastructure/repositories/
+    event_repository.py                ← SQL: buscar eventos, atualizar odds, finalizar partida
+application/use_cases/sport/
+    get_open_events.py                 ← converte modelos do banco para o formato GameProps do frontend
+api/routers/
+    sport.py                           ← endpoint GET /sport/open
+api/main.py                            ← seed: _seed_sport_events() cria 5 eventos ao subir
+```
 
-Único arquivo que executa SQL relacionado a eventos. Funções principais:
+---
+
+#### Arquivos: o que cada um faz
+
+**`event_repository.py`** — único lugar com SQL de eventos:
+
+| Função | SQL |
+|---|---|
+| `get_open_events(db)` | SELECT WHERE status NOT IN (FINISHED, CANCELLED), traz markets e odds junto |
+| `get_by_enet_code(db, code)` | SELECT WHERE enet_code = $1 |
+| `get_live_events(db)` | SELECT WHERE is_live = true AND status = 'LIVE' |
+| `bulk_update_odds(db, updates)` | UPDATE odds por odd_id + event_id |
+| `finish_event(db, id, home, away)` | UPDATE status = FINISHED, salva placar |
+
+O `selectinload` evita o problema N+1: em vez de fazer uma query por evento para buscar os mercados, ele busca todos os mercados de uma vez com `WHERE event_id IN (...)`.
+
+**`get_open_events.py`** — converte o modelo do banco para o que o frontend espera:
 
 | Função | O que faz |
 |---|---|
-| `get_open_events(db)` | SELECT eventos que não estão FINISHED nem CANCELLED, já carregando markets e odds via selectinload |
-| `get_by_enet_code(db, enet_code)` | Busca um evento específico pelo código do Sportradar |
-| `get_live_events(db)` | Só eventos com status=LIVE (usado pelo worker na Fase 5) |
-| `bulk_update_odds(db, updates)` | Atualiza valor de várias odds de uma vez (usado pelo worker na Fase 5) |
-| `finish_event(db, event_id, home, away)` | Marca evento como FINISHED com placar final |
+| `_odd_to_dict(odd)` | Renomeia campos: `value` → `odd`, `odd_id` → `hash`, `option_id` → `optionId` |
+| `_compress_markets(markets)` | Serializa mercados em JSON → zlib.compress → base64 (compatível com `pako.inflate()` no browser) |
+| `event_to_game_props(event)` | Monta o objeto `GameProps` completo que o frontend TypeScript consome |
 
-O `selectinload` carrega os relacionamentos (markets → odds) em queries separadas mas eficientes, em vez de JOINs que gerariam linhas duplicadas.
+> **Por que comprimir?** O frontend original recebia do Sportradar dados comprimidos com pako. O campo `markets` precisa estar nesse formato para o hook `useGame.tsx` conseguir descomprimir com `decompressString()`.
 
 ---
 
-**`application/use_cases/sport/get_open_events.py`**
+#### Fluxo: `GET /sport/open`
 
-Converte os modelos SQLAlchemy para o formato `GameProps` que o frontend TypeScript consome. Três funções auxiliares + o use case:
+**Etapa 1** — Request chega em `api/routers/sport.py`.
 
-| Função | O que faz |
-|---|---|
-| `_odd_to_dict(odd)` | Converte `Odd` (ORM) → `OddProps` (frontend): renomeia `value` → `odd`, `odd_id` → `hash`, `option_id` → `optionId` |
-| `_compress_markets(markets)` | Serializa todos os mercados em JSON e comprime com `zlib.compress()` → base64. O Python `zlib.compress()` gera o mesmo formato zlib que o `pako.inflate()` do frontend descomprime |
-| `event_to_game_props(event)` | Monta o objeto `GameProps` completo: `_id` (estilo MongoDB fake), `__t` = sport_type, `reduced_markets` com as odds principais, `markets` = string comprimida com todos os mercados |
+**Etapa 2** — Router chama `GetOpenEventsUseCase(db).execute()`.
 
-**Por que comprimir o campo `markets`?** O frontend original recebia do Sportradar os dados comprimidos em pako para economizar largura de banda no WebSocket. O backend FastAPI precisa gerar a mesma compressão para ser compatível com `decompressString()` no `useGame.tsx`.
+**Etapa 3** — Use case chama `event_repository.get_open_events(db)`:
+```sql
+SELECT * FROM sport_events WHERE status NOT IN ('FINISHED', 'CANCELLED')
+ORDER BY is_live DESC, scheduled_at ASC
+-- depois: SELECT * FROM markets WHERE event_id IN (uuid1, uuid2, ...)
+-- depois: SELECT * FROM odds WHERE market_id IN (uuid1, uuid2, ...)
+```
+Retorna 5 objetos `SportEvent` com markets e odds já carregados em memória.
+
+**Etapa 4** — Use case chama `event_to_game_props(event)` para cada evento:
+- `_compress_markets()` serializa todos os mercados como JSON e comprime com zlib → campo `markets`
+- Monta `reduced_markets` com as odds no formato `OddProps`
+- Monta todos os outros campos (`_id`, `__t`, `enet_code`, placares, status, etc.)
+
+**Etapa 5** — Retorna `GameProps[]` → FastAPI serializa como JSON → HTTP 200.
 
 ---
 
-**`api/routers/sport.py`**
+#### Seed: 5 eventos
 
-Um único endpoint: `GET /sport/open` que retorna `GameProps[]` com eventos ao vivo primeiro (ordenado por `is_live DESC, scheduled_at ASC`).
+`api/main.py` roda `_seed_sport_events()` ao subir em `development`. Cria os eventos se ainda não existirem (idempotente):
+
+| Evento | Status | Mercados |
+|---|---|---|
+| Brasil vs Argentina | AO VIVO (23') | 1x2, Over/Under 2.5, Ambas Marcam |
+| Man City vs Liverpool | AO VIVO (67') | 1x2, Over/Under 4.5, Ambas Marcam |
+| Lakers vs Celtics | AO VIVO (3Q) | Match Winner, Over/Under 215.5 |
+| Nadal vs Djokovic | PRÉ-JOGO (+2h) | Match Winner, Over/Under Sets |
+| PSG vs Real Madrid | PRÉ-JOGO (+4h) | 1x2, Over/Under 2.5, Double Chance |
 
 ---
 
-**Seed em `api/main.py` — `_seed_sport_events()`**
+#### Como testar
 
-Cria 5 eventos com odds realistas ao subir em `development`:
+Abrir `requests/rosabet.http` e Send Request em `GET /sport/open`. Deve retornar 5 eventos com `reduced_markets` e odds. O campo `markets` é uma string base64 — o frontend descomprime com pako.
 
-| Evento | Tipo | Status | Mercados |
+---
+
+### Fase 5 — WebSocket (odds ao vivo) ✅
+
+**Objetivo:** odds variam automaticamente a cada 5s e o frontend recebe os updates em tempo real via WebSocket.
+
+**Status:** concluída. Worker rodando dentro da API, odds variando, Redis propagando para todos os clientes conectados.
+
+---
+
+#### Arquivos criados
+
+```
+infrastructure/redis/
+    client.py                          ← conexão com Redis (singleton)
+    pubsub.py                          ← listener que recebe do Redis e despacha para WebSockets
+domain/services/
+    odds_calculator.py                 ← algoritmo de variação de odds (sem I/O)
+api/websocket/
+    manager.py                         ← ConnectionManager: rastreia quais WebSockets estão abertos
+    sport_ws.py                        ← endpoint /ws?channel=... com 4 canais
+worker/
+    odds_job.py                        ← job que roda a cada 5s: varia odds → salva → publica no Redis
+    main.py                            ← entry point para rodar o worker separado em produção
+```
+
+---
+
+#### Arquivos: o que cada um faz
+
+**`infrastructure/redis/client.py`** — singleton de conexão. `connect()` é chamado no `lifespan` ao subir a API. `get_redis()` devolve o client de qualquer lugar sem criar novas conexões.
+
+**`infrastructure/redis/pubsub.py`** — task de fundo que escuta o Redis e repassa para os WebSockets:
+
+| Canal Redis | Tipo | Quando chega | O que faz |
 |---|---|---|---|
-| Brasil vs Argentina | Soccer | AO VIVO (1st Half, 23') | 1x2, Over/Under 2.5, Ambas Marcam |
-| Manchester City vs Liverpool | Soccer | AO VIVO (2nd Half, 67') | 1x2, Over/Under 4.5, Ambas Marcam |
-| LA Lakers vs Boston Celtics | Basketball | AO VIVO (3rd Quarter) | Match Winner, Over/Under 215.5 |
-| Nadal vs Djokovic | Tennis | PRÉ-JOGO (+2h) | Match Winner, Over/Under Sets |
-| PSG vs Real Madrid | Soccer | PRÉ-JOGO (+4h) | 1x2, Over/Under 2.5, Double Chance |
+| `events_sports` | `subscribe` | Worker publicou lista de todos os eventos | `manager.broadcast_events(data)` → envia para todos os clientes da lista |
+| `event:*` | `psubscribe` | Worker publicou um evento específico | `manager.broadcast_to_market(enet_code, data)` → envia só para clientes do detalhe daquele evento |
 
-O seed é idempotente — verifica `get_by_enet_code()` antes de inserir, então rodar o servidor múltiplas vezes não duplica dados.
+O `psubscribe` usa pattern matching: assina `event:*` de uma vez, e extrai o `enet_code` do nome do canal (`"event:sr:match:10001"` → `"sr:match:10001"`).
 
----
+**`domain/services/odds_calculator.py`** — duas funções puras, sem I/O:
 
-#### Fluxo completo: `GET /sport/open`
+- `fluctuate_odd(current, is_live, minute)` — varia uma odd. Volatilidade de 0.8% ao vivo, 0.2% em pré-jogo. Odds altas oscilam mais. Nos últimos 15min de partida (>75'), volatilidade ×1.5. Resultado sempre entre 1.01 e 100.
+- `generate_correlated_odds(odds, is_live, minute)` — varia um mercado inteiro e normaliza para manter a margem da casa em ~7%.
 
-```
-Cliente: GET /sport/open
-    ↓
-api/routers/sport.py: instancia GetOpenEventsUseCase(db)
-    ↓
-application/use_cases/sport/get_open_events.py:
-    → event_repo.get_open_events(db)
-         ↓ SELECT sport_events WHERE status NOT IN (FINISHED, CANCELLED)
-         ↓ selectinload → SELECT markets WHERE event_id IN (...)
-         ↓ selectinload → SELECT odds WHERE market_id IN (...)
-         ↓ retorna 5 SportEvent com markets e odds já carregados
-    → para cada event: event_to_game_props(event)
-         ↓ _compress_markets → zlib.compress → base64 → campo "markets"
-         ↓ monta reduced_markets com OddProps no formato do frontend
-         ↓ monta _id fake, __t = sport_type, scores, status, etc.
-    → retorna GameProps[]
-    ↓
-FastAPI: serializa como JSON, HTTP 200
-    ↓
-Cliente recebe: [{__t: "Soccer", enet_code: "sr:match:10001", reduced_markets: [...], markets: "eJy...", ...}, ...]
-```
+**`api/websocket/manager.py`** — `ConnectionManager` rastreia todas as conexões WebSocket abertas:
 
----
+| Atributo | O que guarda |
+|---|---|
+| `events_subs: set[WebSocket]` | Clientes do canal `events_sports` (lista de eventos) |
+| `markets_subs: dict[str, set[WebSocket]]` | Clientes do canal `events_sports_markets`, por `enet_code` |
 
-**Testar com REST Client** — abrir `requests/rosabet.http`:
-1. Clicar em **Send Request** no `GET /sport/open`
-2. Verificar que retorna 5 eventos com `reduced_markets` e odds
-3. O campo `markets` é uma string base64 — o frontend descomprime com pako
+Os broadcasts iteram sobre cópias dos sets e removem automaticamente conexões mortas.
 
-**Testar no frontend** — aponte `NEXT_PUBLIC_SOCKET_URL` para `ws://localhost:8000` e abra `/live`. Como o frontend usa WebSocket para receber eventos (não HTTP), os cards só vão aparecer quando a Fase 5 (WebSocket) estiver pronta. O endpoint HTTP é usado pelo sitemap.
+**`api/websocket/sport_ws.py`** — endpoint `/ws?channel=...` com 4 canais:
+
+| Canal | Ao conectar | Ao receber mensagem |
+|---|---|---|
+| `events_sports` | Envia `GameProps[]` imediatamente; heartbeat a cada 30s | — |
+| `events_sports_markets` | Aguarda mensagens do cliente | `insert\|enet_code\|sr:match:10001` → inscreve e envia estado atual; `delete\|enet_code\|...` → desinscreve |
+| `properties` | Envia `[{"connection_down": false}]` a cada 60s | — |
+| `highlights` | Envia `[]` (stub — implementado na Fase 9) | — |
+
+**`worker/odds_job.py`** — `update_live_odds()` executado a cada 5s:
+1. Busca eventos ao vivo no banco
+2. Para cada mercado: calcula novas odds com `generate_correlated_odds()`
+3. Salva no banco com `bulk_update_odds()` (filtra por `odd_id + event_id` para não confundir eventos diferentes)
+4. Rebusca os eventos do banco (necessário porque o SQLAlchemy mantém os valores antigos em memória)
+5. Publica `[GameProps]` no Redis canal `event:{enet_code}` para cada evento
+6. Publica `GameProps[]` no Redis canal `events_sports` com todos os eventos
+
+**`worker/main.py`** — entry point para produção: `python worker/main.py`. Em desenvolvimento o worker roda como `asyncio.create_task()` dentro da própria API, sem precisar de terminal extra.
 
 ---
 
-### Fase 5 — WebSocket (odds ao vivo)
+#### Como as peças se conectam ao subir a API
 
-**Objetivo:** o frontend recebe updates de odds em tempo real via WebSocket, exatamente como recebia do Sportradar.
+`api/main.py` → `lifespan`:
+1. Redis conecta (`redis_client.connect()`)
+2. `asyncio.create_task(start_pubsub_listener(manager))` — listener fica escutando Redis em background
+3. `asyncio.create_task(run_odds_loop(5))` — worker varia odds a cada 5s em background
+4. API começa a aceitar requisições
 
-**Arquivos:**
-- `infrastructure/redis/client.py` — pool Redis async
-- `infrastructure/redis/pubsub.py` — `publish()`, `subscribe()`
-- `api/websocket/manager.py` — `ConnectionManager`
-- `api/websocket/sport_ws.py` — endpoint `ws://.../ws/events_sports_markets`
-- `worker/main.py` — inicializa APScheduler
-- `worker/odds_job.py` — job que roda a cada 5s
+---
 
-**Fluxo do job:**
+#### Fluxo: odds chegando ao vivo no browser
+
+**Etapa 1 — Frontend conecta no WebSocket**
+
+Browser abre `ws://localhost:8000/ws?channel=events_sports_markets`
+
+`api/websocket/sport_ws.py` aceita e fica no handler `_handle_events_markets`.
+
+**Etapa 2 — Frontend pede um evento específico**
+
+Browser envia: `"insert|enet_code|sr:match:10001"`
+
+`sport_ws.py` → `manager.add_market_sub(ws, "sr:match:10001")` → busca estado atual do banco → envia `[GameProps]` imediatamente.
+
+**Etapa 3 — Worker roda (a cada 5s)**
+
+`worker/odds_job.py` → varia odds → salva no banco → `redis.publish("event:sr:match:10001", "[{...}]")`
+
+**Etapa 4 — Listener recebe do Redis**
+
+`infrastructure/redis/pubsub.py` recebe o pmessage → extrai `enet_code` → `manager.broadcast_to_market("sr:match:10001", data)`
+
+**Etapa 5 — Manager envia para o WebSocket**
+
+`api/websocket/manager.py` → `ws.send_text(data)` → browser recebe o `[GameProps]` atualizado → hook `useGame.tsx` reprocessa as odds → números piscam na tela.
+
+---
+
+#### Como testar
+
+Configurar o `.env.local` do frontend:
+```env
+NEXT_PUBLIC_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_SOCKET_URL=ws://localhost:8000/ws
 ```
-worker/odds_job.py (a cada 5s)
-  → busca eventos ao vivo no banco
-  → para cada mercado: calcula novas odds (domain/services/odds_calculator.py)
-  → salva no banco (odd_repository.bulk_update)
-  → publica no Redis: redis.publish("event:{enet_code}", json_payload)
 
-api/websocket/sport_ws.py (listener Redis permanente)
-  → ao receber mensagem do Redis
-  → ConnectionManager.broadcast(enet_code, data)
-  → clientes WebSocket desse evento recebem o update
+Ou testar direto no console do browser:
+```js
+// lista de eventos (atualiza a cada 5s)
+const ws = new WebSocket('ws://localhost:8000/ws?channel=events_sports');
+ws.onmessage = (e) => console.log('eventos:', JSON.parse(e.data).length);
+
+// mercados de uma partida (odds piscando)
+const ws2 = new WebSocket('ws://localhost:8000/ws?channel=events_sports_markets');
+ws2.onopen = () => { ws2.send('insert|enet_code|sr:match:10001'); ws2.send('OK'); };
+ws2.onmessage = (e) => console.log('odd home:', JSON.parse(e.data)[0].reduced_markets[0].odds[0].odd);
 ```
-
-**Rodar o worker separado:**
-```bash
-# terminal 1: API
-uvicorn api.main:app --reload --port 8000
-
-# terminal 2: Worker
-python worker/main.py
-```
-
-**Testar:** abrir a tela `/live` no frontend e observar odds piscando (mudando a cada 5s).
 
 ---
 

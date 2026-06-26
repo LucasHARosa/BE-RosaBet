@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone, UTC
 
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from api.routers import auth, client, sport
+from api.websocket import sport_ws
 
 
 async def _seed_demo_user() -> None:
@@ -256,8 +258,11 @@ async def _seed_sport_events() -> None:
                 await db.flush()
 
                 for odata in mdata["odds"]:
-                    specifier_part = f"::{mdata['specifier']}" if mdata.get("specifier") else ""
-                    odd_id = f"{mdata['market_id']}{specifier_part}:{odata['option_id']}"
+                    # formato: "1::X", "5::total=2.5:over" (igual ao hash do Sportradar)
+                    if mdata.get("specifier"):
+                        odd_id = f"{mdata['market_id']}::{mdata['specifier']}:{odata['option_id']}"
+                    else:
+                        odd_id = f"{mdata['market_id']}::{odata['option_id']}"
                     db.add(Odd(
                         market_id=market.id,
                         event_id=event.id,
@@ -273,10 +278,28 @@ async def _seed_sport_events() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from infrastructure.redis.client import connect as redis_connect, disconnect as redis_disconnect
+    from infrastructure.redis.pubsub import start_pubsub_listener
+    from api.websocket.manager import manager
+    from worker.odds_job import run_odds_loop
+
     if settings.ENVIRONMENT == "development":
         await _seed_demo_user()
         await _seed_sport_events()
+
+    await redis_connect()
+
+    # task que escuta Redis e despacha para os WebSockets conectados
+    listener_task = asyncio.create_task(start_pubsub_listener(manager))
+    # task que atualiza odds dos eventos ao vivo e publica no Redis
+    worker_task = asyncio.create_task(run_odds_loop(settings.ODDS_UPDATE_INTERVAL_SECONDS))
+
     yield
+
+    listener_task.cancel()
+    worker_task.cancel()
+    await asyncio.gather(listener_task, worker_task, return_exceptions=True)
+    await redis_disconnect()
 
 
 app = FastAPI(
@@ -296,6 +319,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(client.router)
 app.include_router(sport.router)
+app.include_router(sport_ws.router)
 
 
 @app.get("/health")

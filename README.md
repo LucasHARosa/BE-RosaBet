@@ -209,6 +209,22 @@ Para parar: **Ctrl+C** no terminal.
 
 ---
 
+## Conectar o frontend ao backend
+
+Para ver os eventos ao vivo no frontend, configure o `.env.local` do projeto **RosaBet** (Next.js):
+
+```env
+NEXT_PUBLIC_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_SOCKET_URL=ws://localhost:8000/ws
+```
+
+Com isso, o frontend vai:
+- Buscar dados de auth e cadastro no FastAPI (`/auth/login`, `/client`)
+- Receber eventos ao vivo via WebSocket (`ws://localhost:8000/ws?channel=events_sports`)
+- Receber mercados do detalhe de uma partida (`ws://localhost:8000/ws?channel=events_sports_markets`)
+
+---
+
 ## Comparativo entre as opções
 
 | | Docker (Opção A) | Homebrew (Opção B) |

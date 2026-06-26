@@ -41,12 +41,15 @@ async def create(db: AsyncSession, event: SportEvent) -> SportEvent:
 
 async def bulk_update_odds(db: AsyncSession, updates: list[dict]) -> None:
     """
-    updates: list of {"odd_id": str, "value": float, "prev_value": float}
-    Usado pelo worker de flutuação de odds (Fase 5).
+    updates: list de {"odd_id": str, "event_id": UUID, "value": float, "prev_value": float}
+    Filtra por odd_id + event_id para evitar colisão entre eventos com mesmo market_id.
     """
     for update in updates:
         result = await db.execute(
-            select(Odd).where(Odd.odd_id == update["odd_id"])
+            select(Odd).where(
+                Odd.odd_id == update["odd_id"],
+                Odd.event_id == update["event_id"],
+            )
         )
         odd = result.scalar_one_or_none()
         if odd:

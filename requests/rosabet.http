@@ -3,7 +3,7 @@
 ### Após fazer login, copie o access_token e cole na variável @token abaixo
 
 @base = http://localhost:8000
-@token = SEU_TOKEN_AQUI
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGFlMDUyZC01NTY1LTQzMWEtOWI4Ni01NmE2ZTMzZThlZGMiLCJleHAiOjE3ODMxMTE4MDB9.f2C6gdafMr7MKrE50Qnb-HcQaQf2UrkcfPeqleheODc
 
 # ==========================================
 # HEALTH CHECK
@@ -59,6 +59,22 @@ GET {{base}}/sport/open
 ### Listar eventos ao vivo (filtra no cliente a partir do mesmo endpoint)
 # Dica: todos os eventos com is_live=true são os ao vivo
 GET {{base}}/sport/open
+
+
+# ==========================================
+# FASE 5 — WebSocket (testar no browser)
+# ==========================================
+# O REST Client não suporta WebSocket nativamente.
+# Para testar, abra o browser e cole no console:
+#
+# // Canal eventos (lista ao vivo + pré-jogo)
+# const ws = new WebSocket('ws://localhost:8000/ws?channel=events_sports');
+# ws.onmessage = (e) => console.log('eventos:', JSON.parse(e.data).length);
+#
+# // Canal mercados de um evento específico
+# const ws2 = new WebSocket('ws://localhost:8000/ws?channel=events_sports_markets');
+# ws2.onopen = () => { ws2.send('insert|enet_code|sr:match:10001'); ws2.send('OK'); };
+# ws2.onmessage = (e) => console.log('mercados:', JSON.parse(e.data)[0].reduced_markets.length);
 
 
 # ==========================================
