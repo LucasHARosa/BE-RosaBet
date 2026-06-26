@@ -28,6 +28,39 @@ class RegisterRequest(BaseModel):
         return v.strip()
 
 
+class UpdateProfileRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    username: str | None = None
+    phone: str | None = None
+    currency: str | None = None
+    notification_sms: bool | None = None
+    notification_email: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and len(v.strip()) < 3:
+            raise ValueError("Nome deve ter pelo menos 3 caracteres")
+        return v.strip() if v else v
+
+
+class UpdatePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Nova senha deve ter pelo menos 6 caracteres")
+        return v
+
+
+class UpdateActiveRequest(BaseModel):
+    active: bool
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     name: str

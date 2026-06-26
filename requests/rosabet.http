@@ -46,6 +46,45 @@ Content-Type: application/json
 GET {{base}}/user/me
 Authorization: Bearer {{token}}
 
+###
+
+### Atualizar perfil (requer token)
+PUT {{base}}/client
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Lucas Rosa",
+  "username": "lucasrosa",
+  "phone": "11999999999",
+  "currency": "BRL",
+  "notification_sms": true,
+  "notification_email": false
+}
+
+###
+
+### Atualizar senha (requer token)
+PUT {{base}}/client/password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "current_password": "demo123",
+  "new_password": "nova123"
+}
+
+###
+
+### Ativar / desativar conta (requer token)
+PUT {{base}}/client/active
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "active": false
+}
+
 
 # ==========================================
 # FASE 4 — Eventos esportivos
