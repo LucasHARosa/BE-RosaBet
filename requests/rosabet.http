@@ -193,21 +193,40 @@ Authorization: Bearer {{token}}
 
 
 # ==========================================
-# FASE 8 — Depósito
+# FASE 8 — Depósito PIX
 # ==========================================
 
-### Criar depósito PIX
-# POST {{base}}/deposit
-# Authorization: Bearer {{token}}
-# Content-Type: application/json
-#
-# {
-#   "value": 100.00
-# }
+### Verificar se é primeiro depósito (elegível para bônus)
+GET {{base}}/deposit-welcome-verification
+Authorization: Bearer {{token}}
 
-### Listar depósitos
-# GET {{base}}/deposit
-# Authorization: Bearer {{token}}
+###
+
+### Criar depósito PIX — confirma automaticamente em ~10s
+POST {{base}}/deposit
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": 100.00
+}
+
+###
+
+### Criar depósito com bônus máximo (1º depósito: 100% até R$200)
+POST {{base}}/deposit
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": 200.00
+}
+
+###
+
+### Listar meus depósitos
+GET {{base}}/deposit
+Authorization: Bearer {{token}}
 
 
 # ==========================================

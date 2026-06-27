@@ -1595,25 +1595,116 @@ settled: sr:match:10001 → 2x1 (1)
 
 ---
 
-### Fase 8 — Depósito PIX (simulado)
+### Fase 8 — Depósito PIX (simulado) ✅
 
 **Objetivo:** usuário gera um PIX QR Code falso, "confirma" e saldo é creditado.
 
-**Rotas:**
-- `POST /deposit` — gera transação com QR Code fake (base64 de imagem placeholder)
-- `GET /deposit` — lista transações do usuário
-- `GET /deposit-welcome-verification` — verifica se é primeiro depósito (bônus)
+**Status:** concluída. Rotas `POST /deposit`, `GET /deposit` e `GET /deposit-welcome-verification` funcionando. Bônus de boas-vindas automático no primeiro depósito.
 
-**Lógica simulada:**
-```python
-# CreateDepositUseCase
-# 1. cria transação com status=PENDING
-# 2. gera qr_code fake e expiration_date = now() + 30min
-# 3. inicia job assíncrono: após 10s, confirma automaticamente (simula pagamento)
-# 4. ao confirmar: user.credits += value + bonus; transaction.status = CONFIRMED
+---
+
+#### Arquivos criados
+
+```
+infrastructure/repositories/
+    transaction_repository.py          ← SQL: criar, listar, confirmar transação, contar depósitos confirmados
+application/schemas/
+    deposit.py                         ← DepositRequest, DepositResponse, WelcomeVerificationResponse
+application/use_cases/deposit/
+    create_deposit.py                  ← CreateDepositUseCase: valida → gera QR → agenda auto-confirmação
+    list_deposits.py                   ← ListDepositsUseCase: lista depósitos do usuário
+    verify_welcome.py                  ← WelcomeVerificationUseCase: verifica se é primeiro depósito
+api/routers/
+    deposit.py                         ← endpoints POST /deposit, GET /deposit, GET /deposit-welcome-verification
 ```
 
-**Testar:** depositar R$ 100 no frontend, esperar 10s, verificar saldo atualizado.
+---
+
+#### Arquivos: o que cada um faz
+
+**`infrastructure/repositories/transaction_repository.py`**:
+
+| Função | SQL |
+|---|---|
+| `create(db, transaction)` | INSERT em transactions, retorna com refresh |
+| `get_by_user(db, user_id)` | SELECT WHERE user_id = $1 ORDER BY created_at DESC |
+| `get_by_id(db, transaction_id)` | SELECT WHERE id = $1 |
+| `count_confirmed_deposits(db, user_id)` | COUNT WHERE user_id + type=DEPOSIT + status=CONFIRMED |
+| `confirm(db, transaction_id)` | UPDATE status=CONFIRMED, confirmed=true |
+
+**`application/use_cases/deposit/create_deposit.py`** — `CreateDepositUseCase`:
+
+1. Valida `value` entre R$10 e R$50.000 (codes 2001/2002)
+2. Chama `count_confirmed_deposits()` — se for o primeiro, calcula bônus de 100% até R$200
+3. Gera `qr_code` (string EMV fake compatível com cópia-e-cola PIX) e `qr_code_image` (SVG inline em base64 simulando QR)
+4. Cria `Transaction` com `status=PENDING`, `expiration_date = now() + 30min`
+5. Dispara `asyncio.create_task(_auto_confirm(...))` — após 10s, abre nova sessão e:
+   - Muda `transaction.status` → CONFIRMED
+   - Credita `value + bonus` em `user.credits`
+
+**`application/use_cases/deposit/verify_welcome.py`** — `WelcomeVerificationUseCase`:
+
+Chama `count_confirmed_deposits()`. Se zero → `is_first_deposit=true`. Retorna também o percentual (100%) e o teto do bônus (R$200).
+
+---
+
+#### Fluxo: `POST /deposit`
+
+```
+Etapa 1 — Request chega no router
+api/routers/deposit.py → valida body com DepositRequest (value obrigatório, > 0)
+
+Etapa 2 — Use case valida limites
+value < 10 → 400 (code 2001)
+value > 50000 → 400 (code 2002)
+
+Etapa 3 — Verifica bônus de boas-vindas
+count_confirmed_deposits() == 0 → bonus = min(value * 100%, R$200)
+
+Etapa 4 — Gera dados do PIX
+qr_code = string EMV fake (para cópia-e-cola)
+qr_code_image = SVG em data:image/svg+xml;base64,...
+
+Etapa 5 — Salva e agenda confirmação
+INSERT transaction (status=PENDING)
+asyncio.create_task → aguarda 10s → confirma → credita saldo
+
+Etapa 6 — Retorna DepositResponse imediatamente (status ainda PENDING)
+```
+
+> O frontend pode fazer polling em `GET /deposit` para detectar quando o status mudar para CONFIRMED.
+
+---
+
+#### Bônus de boas-vindas
+
+| Situação | Bônus |
+|---|---|
+| 1º depósito confirmado, valor ≤ R$200 | 100% do valor depositado |
+| 1º depósito confirmado, valor > R$200 | R$200 fixo |
+| Depósito subsequente | Sem bônus |
+
+O bônus é creditado junto com o valor principal na confirmação automática (10s).
+
+---
+
+#### Códigos de erro
+
+| Código | Situação |
+|---|---|
+| 2001 | Valor abaixo do mínimo (R$10) |
+| 2002 | Valor acima do máximo (R$50.000) |
+
+---
+
+#### Como testar
+
+Abrir `requests/rosabet.http`:
+1. `GET /deposit-welcome-verification` — verifica se é primeiro depósito
+2. `POST /deposit` com `{"value": 100.00}` — retorna QR Code fake com status PENDING
+3. Aguardar ~10 segundos
+4. `GET /deposit` — status deve aparecer como CONFIRMED
+5. `GET /user/me` — `credits` deve ter aumentado R$100 + R$100 de bônus (primeiro depósito)
 
 ---
 
@@ -1681,6 +1772,6 @@ ls src/app/api/
 | 5 | WebSocket + Worker (odds ao vivo) | Fase 4 + Redis |
 | 6 | Apostas (lock de cotação) | Fase 3 + 4 |
 | 7 | Liquidação (resultado + pagamento) | Fase 5 + 6 |
-| 8 | Depósito PIX simulado | Fase 3 |
+| 8 ✅ | Depósito PIX simulado (bônus boas-vindas) | Fase 3 |
 | 9 | Cassino (seed + rotas) | Fase 2 |
 | 10 | Migração do frontend | Todas as fases anteriores |
