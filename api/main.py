@@ -42,7 +42,9 @@ async def _seed_sport_events() -> None:
     now = datetime.utcnow()  # naive UTC — compatível com DateTime sem timezone no model
 
     events_data = [
-        # --- AO VIVO ---
+        # ========================
+        # AO VIVO
+        # ========================
         {
             "enet_code": "sr:match:10001",
             "sport_type": "Soccer",
@@ -77,6 +79,12 @@ async def _seed_sport_events() -> None:
                  "odds": [
                      {"option_id": "yes", "name": "Sim", "value": 1.75},
                      {"option_id": "no", "name": "Não", "value": 2.05},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.22},
+                     {"option_id": "12", "name": "12", "value": 1.35},
+                     {"option_id": "X2", "name": "X2", "value": 2.10},
                  ]},
             ],
         },
@@ -148,7 +156,120 @@ async def _seed_sport_events() -> None:
                  ]},
             ],
         },
-        # --- PRÉ-JOGO ---
+        {
+            "enet_code": "sr:match:10006",
+            "sport_type": "Soccer",
+            "championship": "Campeonato Brasileiro Série A",
+            "championship_en": "Brazilian Serie A",
+            "country": "Brasil",
+            "country_en": "Brazil",
+            "home_team": "Flamengo",
+            "out_team": "Palmeiras",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "2nd Half",
+            "played_time": "51'",
+            "home_score": 1,
+            "away_score": 1,
+            "scheduled_at": now - timedelta(minutes=51),
+            "started_at": now - timedelta(minutes=51),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 2.20},
+                     {"option_id": "X", "name": "X", "value": 2.80},
+                     {"option_id": "2", "name": "2", "value": 3.10},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 2.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=2.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.95},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.85},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.55},
+                     {"option_id": "no", "name": "Não", "value": 2.45},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.38},
+                     {"option_id": "12", "name": "12", "value": 1.42},
+                     {"option_id": "X2", "name": "X2", "value": 1.65},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10007",
+            "sport_type": "Soccer",
+            "championship": "La Liga",
+            "championship_en": "La Liga",
+            "country": "Espanha",
+            "country_en": "Spain",
+            "home_team": "Barcelona",
+            "out_team": "Atlético de Madrid",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "2nd Half",
+            "played_time": "78'",
+            "home_score": 1,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=78),
+            "started_at": now - timedelta(minutes=78),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 1.45},
+                     {"option_id": "X", "name": "X", "value": 4.20},
+                     {"option_id": "2", "name": "2", "value": 6.50},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 1.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=1.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.25},
+                     {"option_id": "under", "name": "Abaixo", "value": 3.80},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 3.20},
+                     {"option_id": "no", "name": "Não", "value": 1.35},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10008",
+            "sport_type": "Tennis",
+            "championship": "Wimbledon 2026",
+            "championship_en": "Wimbledon 2026",
+            "country": "Inglaterra",
+            "country_en": "England",
+            "home_team": "Carlos Alcaraz",
+            "out_team": "Jannik Sinner",
+            "is_live": True,
+            "status": "LIVE",
+            "match_status": "2nd Set",
+            "played_time": "2S 4-3",
+            "home_score": 1,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=75),
+            "started_at": now - timedelta(minutes=75),
+            "markets": [
+                {"market_id": 186, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "Alcaraz", "value": 1.55},
+                     {"option_id": "2", "name": "Sinner", "value": 2.50},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 3.5", "name_pt": "Total de Sets", "category": "MAIN",
+                 "specifier": "total=3.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 2.10},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.70},
+                 ]},
+            ],
+        },
+        # ========================
+        # PRÉ-JOGO
+        # ========================
         {
             "enet_code": "sr:match:10004",
             "sport_type": "Tennis",
@@ -214,6 +335,158 @@ async def _seed_sport_events() -> None:
                  ]},
             ],
         },
+        {
+            "enet_code": "sr:match:10009",
+            "sport_type": "Soccer",
+            "championship": "Bundesliga",
+            "championship_en": "Bundesliga",
+            "country": "Alemanha",
+            "country_en": "Germany",
+            "home_team": "Bayern de Munique",
+            "out_team": "Borussia Dortmund",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=1, minutes=30),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 1.70},
+                     {"option_id": "X", "name": "X", "value": 3.80},
+                     {"option_id": "2", "name": "2", "value": 5.00},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 3.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=3.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.80},
+                     {"option_id": "under", "name": "Abaixo", "value": 2.00},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.65},
+                     {"option_id": "no", "name": "Não", "value": 2.20},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.18},
+                     {"option_id": "12", "name": "12", "value": 1.28},
+                     {"option_id": "X2", "name": "X2", "value": 2.40},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10010",
+            "sport_type": "Soccer",
+            "championship": "Campeonato Brasileiro Série A",
+            "championship_en": "Brazilian Serie A",
+            "country": "Brasil",
+            "country_en": "Brazil",
+            "home_team": "Santos",
+            "out_team": "Corinthians",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=5),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 2.55},
+                     {"option_id": "X", "name": "X", "value": 2.95},
+                     {"option_id": "2", "name": "2", "value": 2.75},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 2.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=2.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 2.00},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.80},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.85},
+                     {"option_id": "no", "name": "Não", "value": 1.95},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.45},
+                     {"option_id": "12", "name": "12", "value": 1.50},
+                     {"option_id": "X2", "name": "X2", "value": 1.55},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10011",
+            "sport_type": "Basketball",
+            "championship": "NBA",
+            "championship_en": "NBA",
+            "country": "Estados Unidos",
+            "country_en": "United States",
+            "home_team": "Golden State Warriors",
+            "out_team": "Miami Heat",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=2, minutes=30),
+            "markets": [
+                {"market_id": 219, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "Golden State Warriors", "value": 1.75},
+                     {"option_id": "2", "name": "Miami Heat", "value": 2.10},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 220.5", "name_pt": "Total de Pontos", "category": "MAIN",
+                 "specifier": "total=220.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.90},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.90},
+                 ]},
+            ],
+        },
+        {
+            "enet_code": "sr:match:10012",
+            "sport_type": "Soccer",
+            "championship": "Serie A",
+            "championship_en": "Serie A",
+            "country": "Itália",
+            "country_en": "Italy",
+            "home_team": "Juventus",
+            "out_team": "Inter de Milão",
+            "is_live": False,
+            "status": "NOT_STARTED",
+            "match_status": "Not started",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now + timedelta(hours=8),
+            "markets": [
+                {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1", "name": "1", "value": 2.30},
+                     {"option_id": "X", "name": "X", "value": 3.10},
+                     {"option_id": "2", "name": "2", "value": 3.20},
+                 ]},
+                {"market_id": 5, "name": "Over/Under 2.5", "name_pt": "Total de Gols", "category": "MAIN",
+                 "specifier": "total=2.5", "has_specifiers": True,
+                 "odds": [
+                     {"option_id": "over", "name": "Acima", "value": 1.95},
+                     {"option_id": "under", "name": "Abaixo", "value": 1.85},
+                 ]},
+                {"market_id": 3, "name": "Both Teams to Score", "name_pt": "Ambas Marcam", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "yes", "name": "Sim", "value": 1.70},
+                     {"option_id": "no", "name": "Não", "value": 2.15},
+                 ]},
+                {"market_id": 10, "name": "Double Chance", "name_pt": "Chance Dupla", "category": "MAIN",
+                 "odds": [
+                     {"option_id": "1X", "name": "1X", "value": 1.40},
+                     {"option_id": "12", "name": "12", "value": 1.48},
+                     {"option_id": "X2", "name": "X2", "value": 1.58},
+                 ]},
+            ],
+        },
     ]
 
     async with AsyncSessionLocal() as db:
@@ -273,7 +546,7 @@ async def _seed_sport_events() -> None:
                     ))
 
         await db.commit()
-        print("seed: 5 eventos esportivos criados com mercados e odds")
+        print("seed: eventos esportivos criados com mercados e odds")
 
 
 @asynccontextmanager
@@ -289,16 +562,18 @@ async def lifespan(app: FastAPI):
 
     await redis_connect()
 
-    # task que escuta Redis e despacha para os WebSockets conectados
+    from worker.result_job import run_result_loop
+
     listener_task = asyncio.create_task(start_pubsub_listener(manager))
-    # task que atualiza odds dos eventos ao vivo e publica no Redis
     worker_task = asyncio.create_task(run_odds_loop(settings.ODDS_UPDATE_INTERVAL_SECONDS))
+    result_task = asyncio.create_task(run_result_loop(30))
 
     yield
 
     listener_task.cancel()
     worker_task.cancel()
-    await asyncio.gather(listener_task, worker_task, return_exceptions=True)
+    result_task.cancel()
+    await asyncio.gather(listener_task, worker_task, result_task, return_exceptions=True)
     await redis_disconnect()
 
 

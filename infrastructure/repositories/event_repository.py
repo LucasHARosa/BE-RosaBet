@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -58,6 +59,20 @@ async def bulk_update_odds(db: AsyncSession, updates: list[dict]) -> None:
     await db.commit()
 
 
+async def get_events_to_settle(db: AsyncSession, delay_minutes: int) -> list[SportEvent]:
+    cutoff = datetime.utcnow() - timedelta(minutes=delay_minutes)
+    result = await db.execute(
+        select(SportEvent)
+        .where(
+            SportEvent.is_live == True,
+            SportEvent.status == "LIVE",
+            SportEvent.started_at <= cutoff,
+        )
+        .options(selectinload(SportEvent.markets).selectinload(Market.odds))
+    )
+    return list(result.scalars().all())
+
+
 async def finish_event(db: AsyncSession, event_id, home_score: int, away_score: int) -> None:
     result = await db.execute(select(SportEvent).where(SportEvent.id == event_id))
     event = result.scalar_one_or_none()
@@ -67,4 +82,22 @@ async def finish_event(db: AsyncSession, event_id, home_score: int, away_score: 
         event.status = "FINISHED"
         event.is_live = False
         event.result = {"home": home_score, "away": away_score}
+    await db.commit()
+
+
+async def recycle_event(db: AsyncSession, event_id) -> None:
+    import random
+    result = await db.execute(select(SportEvent).where(SportEvent.id == event_id))
+    event = result.scalar_one_or_none()
+    if event:
+        event.status = "NOT_STARTED"
+        event.is_live = False
+        event.home_score = 0
+        event.away_score = 0
+        event.result = None
+        event.started_at = None
+        event.finished_at = None
+        event.match_status = "Not started"
+        event.played_time = None
+        event.scheduled_at = datetime.utcnow() + timedelta(hours=random.randint(1, 10))
     await db.commit()

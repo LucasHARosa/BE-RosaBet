@@ -1459,33 +1459,139 @@ Abrir `requests/rosabet.http`:
 
 ---
 
-### Fase 7 — Liquidação de Apostas
+### Fase 7 — Liquidação de Apostas ✅
 
-**Objetivo:** ao fim de cada partida, gerar resultado aleatório, avaliar cada seleção e pagar os vencedores.
+**Objetivo:** ao fim de cada partida, gerar resultado aleatório ponderado pelas odds, avaliar cada seleção e pagar os vencedores.
 
-**Worker (`worker/result_job.py`):**
-```python
-# ao criar partida → agenda job para daqui a RESULT_DELAY_MINUTES
-# ex: partida de 90min → agenda resultado para 95min após started_at
+**Status:** concluída. Worker rodando a cada 30s, eventos finalizados automaticamente após `RESULT_DELAY_MINUTES`, apostas liquidadas e saldo creditado.
 
-# ao executar:
-1. gera resultado ponderado pelas odds do mercado 1x2
-2. gera placar (home_goals, away_goals) coerente com o resultado
-3. salva resultado no banco + marca partida como FINISHED
-4. para cada bet_item → evaluate_outcome() → WINS ou LOST
-5. para cada aposta com todos items WINS → status=WINS, credita paid_value
-6. publica no Redis → WebSocket notifica frontend
+---
+
+#### Arquivos criados
+
+```
+domain/services/
+    result_evaluator.py                ← funções puras: gerar outcome ponderado, avaliar seleção por market_id
+    score_generator.py                 ← gera placar coerente com o resultado (por esporte)
+worker/
+    result_job.py                      ← loop a cada 30s: busca eventos prontos para liquidar e executa o use case
+application/use_cases/betting/
+    settle_event.py                    ← SettleEventUseCase: finaliza evento → avalia itens → paga apostas ganhadoras
 ```
 
-**`domain/services/result_evaluator.py`** — cobre os mercados:
-- 1x2 (market_id=1)
-- Over/Under (market_id=5)
-- Both Teams to Score (market_id=3)
-- Double Chance (market_id=10)
-- 1st Half 1x2 (market_id=45)
-- 1st Half Over/Under (market_id=68)
+---
 
-**Testar:** criar aposta, aguardar job rodar (diminuir `RESULT_DELAY_MINUTES=1` para teste), verificar que aposta mudou para `WINS` ou `LOST` e saldo foi atualizado.
+#### Arquivos modificados
+
+```
+infrastructure/repositories/
+    event_repository.py                ← + get_events_to_settle(): busca eventos LIVE cujo started_at < agora - delay
+    bet_repository.py                  ← + get_open_items_by_event(), get_bet_with_items()
+api/main.py                            ← + asyncio.create_task(run_result_loop(30)) no lifespan
+                                       ← + seed expandido: 12 eventos (6 live, 6 pré-jogo)
+```
+
+---
+
+#### Seed expandido — 12 eventos
+
+| Evento | Esporte | Status | Mercados |
+|---|---|---|---|
+| Brasil vs Argentina | Soccer / Copa do Mundo | AO VIVO 23' | 1x2, Over/Under, Ambas Marcam, Double Chance |
+| Man City vs Liverpool | Soccer / Premier League | AO VIVO 67' | 1x2, Over/Under, Ambas Marcam |
+| LA Lakers vs Boston Celtics | Basketball / NBA | AO VIVO 3Q | Match Winner, Over/Under |
+| Flamengo vs Palmeiras | Soccer / Brasileirão | AO VIVO 51' | 1x2, Over/Under, Ambas Marcam, Double Chance |
+| Barcelona vs Atlético Madrid | Soccer / La Liga | AO VIVO 78' | 1x2, Over/Under, Ambas Marcam |
+| Alcaraz vs Sinner | Tennis / Wimbledon | AO VIVO 2S | Match Winner, Over/Under Sets |
+| Nadal vs Djokovic | Tennis / Roland Garros | PRÉ-JOGO +2h | Match Winner, Over/Under Sets |
+| PSG vs Real Madrid | Soccer / Champions League | PRÉ-JOGO +4h | 1x2, Over/Under, Double Chance |
+| Bayern vs Borussia Dortmund | Soccer / Bundesliga | PRÉ-JOGO +1h30 | 1x2, Over/Under, Ambas Marcam, Double Chance |
+| Santos vs Corinthians | Soccer / Brasileirão | PRÉ-JOGO +5h | 1x2, Over/Under, Ambas Marcam, Double Chance |
+| Golden State Warriors vs Miami Heat | Basketball / NBA | PRÉ-JOGO +2h30 | Match Winner, Over/Under |
+| Juventus vs Inter de Milão | Soccer / Serie A | PRÉ-JOGO +8h | 1x2, Over/Under, Ambas Marcam, Double Chance |
+
+---
+
+#### Arquivos: o que cada um faz
+
+**`domain/services/result_evaluator.py`** — três funções puras:
+
+| Função | O que faz |
+|---|---|
+| `get_main_market_odds(markets)` | Retorna as odds do mercado mais adequado para geração de resultado (prioridade: 1x2 → NBA → Tennis) |
+| `generate_outcome(odds)` | Sorteia o resultado ponderado pela probabilidade implícita (1/odd) — odds menores = resultado mais provável |
+| `evaluate_outcome(market_id, option_id, specifier, home, away)` | Retorna `True` se a seleção ganhou. Cobre market_ids: 1, 3, 5, 10, 29, 45, 186, 219 |
+
+**`domain/services/score_generator.py`** — `generate_score(outcome, sport_type)`:
+
+| Esporte | outcome="1" | outcome="X" | outcome="2" |
+|---|---|---|---|
+| Soccer | 1-0, 2-0, 2-1, 3-0... | 0-0, 1-1, 2-2 | 0-1, 0-2, 1-2... |
+| Basketball | base+diff × base | — | base × base+diff |
+| Tennis | 2-0 ou 2-1 | — | 0-2 ou 1-2 |
+
+**`worker/result_job.py`** — `run_result_loop(30)`:
+
+Roda a cada 30s. Abre uma sessão de banco, chama `get_events_to_settle()` e para cada evento executa `SettleEventUseCase`.
+
+**`application/use_cases/betting/settle_event.py`** — `SettleEventUseCase.execute(event)`:
+
+1. `get_main_market_odds(event.markets)` → determina mercado para outcome
+2. `generate_outcome(odds)` → sorteia resultado ponderado
+3. `generate_score(outcome, event.sport_type)` → gera placar
+4. `event_repo.finish_event(...)` → status=FINISHED, salva placar
+5. `bet_repo.get_open_items_by_event(event.id)` → busca todos os itens OPENED desse evento
+6. Para cada item: `evaluate_outcome(...)` → WINS ou LOST
+7. Agrupa por `bet_id` → verifica se a aposta está totalmente resolvida
+8. Se todos os itens resolvidos e nenhum LOST → aposta WINS, `user_repo.credit(return_value)`
+9. Se algum LOST → aposta LOST
+
+---
+
+#### Fluxo: liquidação automática
+
+**Etapa 1 — Job acorda (a cada 30s)**
+
+`worker/result_job.py` → `event_repo.get_events_to_settle(db, RESULT_DELAY_MINUTES)`
+
+```sql
+SELECT * FROM sport_events
+WHERE is_live = true AND status = 'LIVE' AND started_at <= now() - interval 'X minutes'
+```
+
+**Etapa 2 — Use case processa cada evento**
+
+`SettleEventUseCase.execute(event)`
+
+**Etapa 3 — Avalia cada bet_item**
+
+```sql
+SELECT * FROM bet_items WHERE event_id = $1 AND status = 'OPENED'
+```
+
+Para cada item: `evaluate_outcome()` → UPDATE status = 'WINS' ou 'LOST'
+
+**Etapa 4 — Verifica apostas completas**
+
+Para cada `bet_id` afetado: busca a aposta com todos os items. Se não há mais items OPENED:
+- Se todos WINS → bet.status = WINS, `user.credits += return_value`
+- Se algum LOST → bet.status = LOST
+
+**Etapa 5 — Print no terminal**
+
+```
+settled: sr:match:10001 → 2x1 (1)
+```
+
+---
+
+#### Como testar
+
+1. Reduzir `.env`: `RESULT_DELAY_MINUTES=1`
+2. Fazer login e criar uma aposta em um evento ao vivo
+3. Aguardar ~1 minuto
+4. `GET /bet` — aposta deve mostrar `status=WINS` ou `status=LOST`
+5. `GET /user/me` — se ganhou, `credits` deve ter aumentado com `return_value`
 
 ---
 
