@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from api.routers import auth, client, sport
+from api.routers import auth, client, sport, bet
 from api.websocket import sport_ws
 
 
@@ -319,6 +319,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(client.router)
 app.include_router(sport.router)
+app.include_router(bet.router)
 app.include_router(sport_ws.router)
 
 

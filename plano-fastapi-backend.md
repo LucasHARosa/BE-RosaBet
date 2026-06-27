@@ -1294,44 +1294,168 @@ ws2.onmessage = (e) => console.log('odd home:', JSON.parse(e.data)[0].reduced_ma
 
 ---
 
-### Fase 6 — Apostas
+### Fase 6 — Apostas ✅
 
 **Objetivo:** usuário consegue fazer aposta simples e múltipla, com cotação travada no momento do clique.
 
-**Rotas:**
-- `POST /bet` — cria aposta
-- `GET /bet` — lista apostas do usuário
-- `GET /bet/{id}` — detalhe de uma aposta
+**Status:** concluída. Rotas `POST /bet`, `GET /bet` e `GET /bet/{id}` funcionando.
 
-**Regras críticas (`domain/services/betting_rules.py`):**
-```python
-def validate_bet(value: float, user_credits: float, selections: list):
-    if value <= 0:
-        raise BetError("Valor inválido", code=1001)
-    if value > user_credits:
-        raise BetError("Saldo insuficiente", code=1002)
-    if len(selections) == 0:
-        raise BetError("Nenhuma seleção", code=1003)
-    if len(selections) > 20:
-        raise BetError("Máximo 20 seleções", code=1004)
+---
 
-def calculate_return(value: float, selections: list[float]) -> tuple[float, float]:
-    total_quotation = 1.0
-    for q in selections:
-        total_quotation *= q
-    return_value = round(value * total_quotation, 2)
-    return round(total_quotation, 4), return_value
+#### Arquivos criados
+
+```
+domain/services/
+    betting_rules.py                   ← calculate_return(): multiplica cotações, calcula retorno
+infrastructure/repositories/
+    odd_repository.py                  ← SQL: busca odd por odd_id + event_id
+    bet_repository.py                  ← SQL: criar aposta, listar por usuário, buscar por id
+application/schemas/
+    bet.py                             ← BetRequest, BetItemRequest, BetResponse, BetItemResponse
+application/use_cases/betting/
+    create_bet.py                      ← orquestra o fluxo completo de criação de aposta
+    list_bets.py                       ← lista apostas do usuário autenticado
+    get_bet.py                         ← retorna uma aposta por ID (somente do próprio usuário)
+api/routers/
+    bet.py                             ← endpoints POST /bet, GET /bet, GET /bet/{id}
 ```
 
-**Lock de cotação (`application/use_cases/betting/create_bet.py`):**
-```python
-# para cada seleção:
-odd = await odd_repository.get_by_odd_id(selection.odd_id)
-locked_quotation = odd.value          # trava AQUI
-# se accept_all_changes=False e odd caiu → rejeita com code=1050
+---
+
+#### Arquivos: o que cada um faz
+
+**`domain/services/betting_rules.py`** — única função pura, sem I/O:
+
+| Função | O que faz |
+|---|---|
+| `calculate_return(value, quotations)` | Multiplica todas as cotações → retorna `(total_quotation, return_value)` arredondados |
+
+**`infrastructure/repositories/odd_repository.py`**:
+
+| Função | SQL |
+|---|---|
+| `get_by_odd_id_and_event(db, odd_id, event_id)` | SELECT WHERE odd_id = $1 AND event_id = $2 |
+
+> Filtra por `event_id` além do `odd_id` porque dois eventos diferentes podem ter o mesmo `odd_id` (ex: ambos têm mercado 1x2, opção "1"). Sem o filtro, a aposta poderia travar a odd de outro evento.
+
+**`infrastructure/repositories/bet_repository.py`**:
+
+| Função | SQL |
+|---|---|
+| `create(db, bet)` | INSERT na tabela bets + bet_items (cascade), recarrega com selectinload |
+| `get_by_user(db, user_id)` | SELECT bets WHERE user_id = $1, ordenado por created_at DESC |
+| `get_by_id(db, bet_id, user_id)` | SELECT WHERE id = $1 AND user_id = $2 (garante que o usuário só vê as próprias apostas) |
+
+**`application/schemas/bet.py`** — quatro schemas:
+
+| Schema | Usado em |
+|---|---|
+| `BetItemRequest` | Cada seleção dentro do body do `POST /bet` |
+| `BetRequest` | Body do `POST /bet` |
+| `BetItemResponse` | Cada item dentro da resposta |
+| `BetResponse` | Resposta do `POST /bet`, `GET /bet`, `GET /bet/{id}` |
+
+**`application/use_cases/betting/create_bet.py`** — `CreateBetUseCase`:
+
+Valida → trava cotações → calcula retorno → cria aposta → debita saldo.
+
+**`application/use_cases/betting/list_bets.py`** — `ListBetsUseCase`:
+
+Chama `bet_repo.get_by_user()` e serializa com `BetResponse`.
+
+**`application/use_cases/betting/get_bet.py`** — `GetBetUseCase`:
+
+Chama `bet_repo.get_by_id()` passando também o `user_id` — se a aposta não for do usuário, retorna 404.
+
+---
+
+#### Fluxo: `POST /bet`
+
+**Etapa 1 — Request chega no router**
+
+`api/routers/bet.py` recebe o body, valida com `BetRequest`. Qualquer campo faltando → 422.
+
+**Etapa 2 — Router chama o use case**
+
+`api/routers/bet.py` → `CreateBetUseCase(db).execute(user_id, data)`
+
+**Etapa 3 — Use case valida regras básicas**
+
+- `value <= 0` → 400 (code 1001)
+- `sports` vazia → 400 (code 1003)
+- `len(sports) > 20` → 400 (code 1004)
+- `value > user.credits` (ou bonus/casino_credits conforme `spend_from`) → 400 (code 1002)
+
+**Etapa 4 — Use case processa cada seleção**
+
+Para cada item em `data.sports`:
+
+1. `event_repo.get_by_enet_code(enet_code)` — evento deve existir e não estar FINISHED/CANCELLED
+2. `odd_repo.get_by_odd_id_and_event(odd_id, event.id)` — odd deve existir e estar ativa
+3. Lê `odd.value` do banco → **trava a cotação**
+4. Se `accept_all_changes=False` e `odd.value < sel.quotation` e `only_accept_high=False` → 400 (code 1050 "Odd diminuiu")
+5. Appenda cotação travada + `BetItem` na lista
+
+**Etapa 5 — Calcula retorno**
+
+`betting_rules.calculate_return(value, quotations)` → multiplica todas as cotações → `(total_quotation, return_value)`
+
+**Etapa 6 — Salva e debita**
+
+`bet_repo.create(db, Bet(..., items=[...]))` → INSERT na tabela bets + bet_items
+
+`user_repo.debit(db, user_id, value, spend_from)` → desconta do saldo
+
+**Etapa 7 — Retorna**
+
+`BetResponse` com `code="RB-2026-XXXXXX"`, `status="OPENED"`, `extracted_quotation`, `return_value` e `items[]`.
+
+---
+
+#### Fluxo: `GET /bet`
+
+**Etapa 1** — `api/routers/bet.py` extrai `current_user` via `Depends(get_current_user)`.
+
+**Etapa 2** — `ListBetsUseCase(db).execute(user_id)`.
+
+**Etapa 3** — `bet_repo.get_by_user(db, user_id)`:
+```sql
+SELECT * FROM bets WHERE user_id = $1 ORDER BY created_at DESC
+-- depois: SELECT * FROM bet_items WHERE bet_id IN (...)
 ```
 
-**Testar:** fazer aposta no frontend com saldo demo e verificar que `GET /bet` retorna a aposta com `status=OPENED` e `quotation` correto.
+**Etapa 4** — Serializa cada aposta como `BetResponse` e retorna a lista.
+
+---
+
+#### Fluxo: `GET /bet/{id}`
+
+Igual ao anterior, mas `bet_repo.get_by_id(db, bet_id, user_id)` filtra por `id AND user_id`. Se não encontrar (aposta não existe ou é de outro usuário) → 404.
+
+---
+
+#### Regras de negócio
+
+| Código | Situação |
+|---|---|
+| 1001 | Valor inválido (≤ 0) |
+| 1002 | Saldo insuficiente |
+| 1003 | Nenhuma seleção enviada |
+| 1004 | Mais de 20 seleções |
+| 1030 | Evento FINISHED ou CANCELLED |
+| 1040 | Odd inativa ou não encontrada |
+| 1050 | Odd diminuiu e `accept_all_changes=false` |
+
+---
+
+#### Como testar
+
+Abrir `requests/rosabet.http`:
+1. Send Request em `POST /auth/login`, copiar token
+2. Send Request em `POST /bet` (aposta simples — Brasil vence 1x2 por R$ 10)
+3. Verificar resposta: `status=OPENED`, `code=RB-2026-XXXXXX`, `return_value` correto
+4. Send Request em `GET /bet` — deve listar a aposta criada
+5. Verificar saldo com `GET /user/me` — `credits` deve ter diminuído R$ 10
 
 ---
 

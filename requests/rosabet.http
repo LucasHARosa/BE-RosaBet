@@ -120,36 +120,76 @@ GET {{base}}/sport/open
 # FASE 6 — Apostas
 # ==========================================
 
-### Criar aposta simples
-# POST {{base}}/bet
-# Authorization: Bearer {{token}}
-# Content-Type: application/json
-#
-# {
-#   "value": 10.00,
-#   "spend_from": "credits",
-#   "accept_all_changes": false,
-#   "only_accept_high": false,
-#   "sports": [
-#     {
-#       "enet_code": "sr:match:10001",
-#       "market_id": 1,
-#       "odd_id": "1::1",
-#       "option_id": "1",
-#       "quotation": 1.85,
-#       "is_live": true,
-#       "specifier": null
-#     }
-#   ]
-# }
+### Criar aposta simples (Brasil vence 1x2)
+POST {{base}}/bet
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": 10.00,
+  "spend_from": "credits",
+  "accept_all_changes": false,
+  "only_accept_high": false,
+  "sports": [
+    {
+      "enet_code": "sr:match:10001",
+      "market_id": 1,
+      "odd_id": "1::1",
+      "option_id": "1",
+      "quotation": 1.85,
+      "is_live": true,
+      "specifier": null
+    }
+  ]
+}
+
+###
+
+### Criar aposta múltipla (2 seleções)
+POST {{base}}/bet
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": 20.00,
+  "spend_from": "credits",
+  "accept_all_changes": true,
+  "only_accept_high": false,
+  "sports": [
+    {
+      "enet_code": "sr:match:10001",
+      "market_id": 1,
+      "odd_id": "1::1",
+      "option_id": "1",
+      "quotation": 1.85,
+      "is_live": true,
+      "specifier": null
+    },
+    {
+      "enet_code": "sr:match:10005",
+      "market_id": 1,
+      "odd_id": "1::2",
+      "option_id": "2",
+      "quotation": 2.90,
+      "is_live": false,
+      "specifier": null
+    }
+  ]
+}
+
+###
 
 ### Listar minhas apostas
-# GET {{base}}/bet
-# Authorization: Bearer {{token}}
+GET {{base}}/bet
+Authorization: Bearer {{token}}
+
+###
+
+@betId = ID_DA_APOSTA_AQUI
 
 ### Detalhe de uma aposta
-# GET {{base}}/bet/ID_DA_APOSTA_AQUI
-# Authorization: Bearer {{token}}
+GET {{base}}/bet/{{betId}}
+Authorization: Bearer {{token}}
 
 
 # ==========================================
