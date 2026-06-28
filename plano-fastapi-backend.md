@@ -1708,18 +1708,139 @@ Abrir `requests/rosabet.http`:
 
 ---
 
-### Fase 9 — Cassino
+### Fase 9 — Cassino ✅
 
 **Objetivo:** telas de cassino funcionam com dados reais do banco em vez do mock Next.js.
 
-**Rotas:**
-- `GET /casino/games_type` — retorna `CasinoHighlights[]` agrupado por tipo
-- `GET /casino/games?type=SLOT` — retorna `CasinoI[]` filtrado
-- `POST /pragmatic/game-url` — retorna URL do jogo (pode ser placeholder)
+**Status:** concluída. 20 jogos seedados no banco. Rotas `GET /casino/games_type`, `GET /casino/games` e `POST /pragmatic/game-url` funcionando com respostas no mesmo formato do frontend atual.
 
-**Seed dos jogos:** migrar os 21 jogos do arquivo `src/app/api/casino/_data/games.ts` para uma migration SQL ou script Python de seed.
+---
 
-**Testar:** acessar `/casino` no frontend com `NEXT_PUBLIC_BASE_URL=http://localhost:8000`.
+#### Arquivos criados
+
+```
+infrastructure/repositories/
+    casino_repository.py               ← SQL: listar todos, filtrar por tipo, buscar por game_code
+application/schemas/
+    casino.py                          ← CasinoGameResponse, CasinoHighlightsResponse, GameUrlRequest, GameUrlResponse
+application/use_cases/casino/
+    get_games_type.py                  ← GetGamesTypeUseCase: retorna lista agrupada pelos 10 tipos
+    get_games.py                       ← GetGamesUseCase: lista com filtro opcional por tipo
+    get_game_url.py                    ← GetGameUrlUseCase: retorna URL fake do jogo por symbol
+api/routers/
+    casino.py                          ← GET /casino/games_type, GET /casino/games, POST /pragmatic/game-url
+api/seed.py                            ← + seed_casino_games(): 20 jogos ao subir em development
+api/main.py                            ← + casino router + seed_casino_games() no lifespan
+```
+
+---
+
+#### Arquivos: o que cada um faz
+
+**`infrastructure/repositories/casino_repository.py`**:
+
+| Função | SQL / Lógica |
+|---|---|
+| `get_all(db)` | SELECT WHERE active=true ORDER BY name |
+| `get_by_type(db, type_filter)` | Filtro especial para "highlights", "on_the_rise", "news"; ou WHERE type = $1 para os demais |
+| `get_by_game_code(db, game_code)` | SELECT WHERE game_code = $1 |
+| `exists_by_game_code(db, game_code)` | Usado pelo seed para idempotência |
+
+**Filtros especiais** (`SPECIAL_FILTERS`):
+- `highlights` → `WHERE highlights = true`
+- `on_the_rise` → `WHERE on_the_rise IS NOT NULL`
+- `news` → `WHERE news IS NOT NULL`
+- qualquer outro (slot, roulette, etc.) → `WHERE type = 'slot'`
+
+**`application/use_cases/casino/get_games_type.py`** — `GetGamesTypeUseCase`:
+
+Itera pelos 10 tipos fixos `["highlights", "on_the_rise", "news", "slot", "roulette", "live_dealer", "bingo", "casual", "table", "scratch_card"]`, chama `get_by_type()` para cada um, e retorna:
+```json
+[
+  { "amountGames": 4, "label": "highlights", "data": [...] },
+  { "amountGames": 5, "label": "on_the_rise", "data": [...] },
+  ...
+]
+```
+Esse formato é idêntico ao que o frontend consome hoje na rota `/api/casino/games_type`.
+
+**`application/use_cases/casino/get_game_url.py`** — `GetGameUrlUseCase`:
+
+Busca o jogo por `symbol` (= `game_code`) → se não encontrado ou inativo → 404 (code 3001). Retorna URL fake:
+```
+https://rosabet.com.br/casino/play?symbol=wc26_golden_boot&provider=RosaBet+Studios&lang=pt&cur=BRL
+```
+
+**`api/seed.py` → `seed_casino_games()`**:
+
+Insere os 20 jogos (mesmos do `games.ts` do frontend) ao subir a API em development. Idempotente — pula `game_code` que já existir no banco.
+
+---
+
+#### Seed — 20 jogos por categoria
+
+| Tipo | Jogos |
+|---|---|
+| slot (8) | Golden Boot, Hat Trick Fever, Penalty King, Stadium Wild Megaways, World Cup Spin, Golazo! Bonanza, USA-Canada-México, Final Whistle Jackpot |
+| roulette (2) | Copa Roulette VIP, Roleta Clássica Copa 26 |
+| live_dealer (2) | Live Blackjack Copa 2026, Baccarat ao Vivo |
+| bingo (2) | Bingo da Torcida, Bingo do Gol |
+| table (2) | Poker dos Campeões, Blackjack MVP |
+| casual (2) | Penalty Shootout Rush, Free Kick Frenzy |
+| scratch_card (2) | Raspa e Vence — Troféu, Raspa a Camisa |
+
+Highlights (4): Golden Boot, Hat Trick Fever, Penalty King, Stadium Wild Megaways, Copa Roulette VIP, Live Blackjack
+
+---
+
+#### Fluxo: `GET /casino/games_type`
+
+```
+Request → api/routers/casino.py (sem auth — rota pública)
+→ GetGamesTypeUseCase.execute()
+→ para cada tipo em TYPES (10 iterações):
+    casino_repo.get_by_type(db, label)
+→ retorna CasinoHighlightsResponse[] com amountGames + data
+```
+
+#### Fluxo: `GET /casino/games?type=slot`
+
+```
+Request com query param type=slot
+→ GetGamesUseCase.execute("slot")
+→ casino_repo.get_by_type(db, "slot")
+→ retorna CasinoGameResponse[] (só slots)
+```
+
+Sem query param → retorna todos os jogos.
+
+#### Fluxo: `POST /pragmatic/game-url`
+
+```
+Request com Bearer token + body {"symbol": "wc26_golden_boot"}
+→ GetGameUrlUseCase.execute(data)
+→ casino_repo.get_by_game_code(db, "wc26_golden_boot")
+→ retorna {"gameURL": "https://rosabet.com.br/casino/play?symbol=wc26_golden_boot..."}
+```
+
+---
+
+#### Código de erro
+
+| Código | Situação |
+|---|---|
+| 3001 | Jogo não encontrado ou inativo |
+
+---
+
+#### Como testar
+
+Abrir `requests/rosabet.http`:
+1. `GET /casino/games_type` — retorna os 10 grupos com `amountGames` e `data[]`
+2. `GET /casino/games` — todos os 20 jogos
+3. `GET /casino/games?type=slot` — só os 8 slots
+4. `GET /casino/games?type=highlights` — jogos em destaque
+5. `POST /pragmatic/game-url` com `{"symbol": "wc26_golden_boot"}` — retorna `gameURL`
 
 ---
 
@@ -1773,5 +1894,5 @@ ls src/app/api/
 | 6 | Apostas (lock de cotação) | Fase 3 + 4 |
 | 7 | Liquidação (resultado + pagamento) | Fase 5 + 6 |
 | 8 ✅ | Depósito PIX simulado (bônus boas-vindas) | Fase 3 |
-| 9 | Cassino (seed + rotas) | Fase 2 |
+| 9 ✅ | Cassino (seed + rotas) | Fase 2 |
 | 10 | Migração do frontend | Todas as fases anteriores |

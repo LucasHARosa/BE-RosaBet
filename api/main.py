@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from api.routers import auth, client, sport, bet, deposit
+from api.routers import auth, client, sport, bet, deposit, casino
 from api.websocket import sport_ws
-from api.seed import seed_demo_user, seed_sport_events
+from api.seed import seed_demo_user, seed_sport_events, seed_casino_games
 from infrastructure.redis.client import connect as redis_connect, disconnect as redis_disconnect
 from infrastructure.redis.pubsub import start_pubsub_listener
 from api.websocket.manager import manager
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     if settings.ENVIRONMENT == "development":
         await seed_demo_user()
         await seed_sport_events()
+        await seed_casino_games()
 
     await redis_connect()
 
@@ -51,6 +52,7 @@ app.include_router(client.router)
 app.include_router(sport.router)
 app.include_router(bet.router)
 app.include_router(deposit.router)
+app.include_router(casino.router)
 app.include_router(sport_ws.router)
 
 

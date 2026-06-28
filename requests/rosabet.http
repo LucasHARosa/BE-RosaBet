@@ -233,8 +233,41 @@ Authorization: Bearer {{token}}
 # FASE 9 — Cassino
 # ==========================================
 
-### Tipos de jogos
-# GET {{base}}/casino/games_type
+### Todos os jogos agrupados por categoria (highlights, on_the_rise, news, slot, roulette...)
+GET {{base}}/casino/games_type
 
-### Jogos por categoria
-# GET {{base}}/casino/games?type=slot
+###
+
+### Todos os jogos (sem filtro)
+GET {{base}}/casino/games
+
+###
+
+### Jogos filtrados por tipo: slot
+GET {{base}}/casino/games?type=slot
+
+###
+
+### Jogos filtrados: highlights
+GET {{base}}/casino/games?type=highlights
+
+###
+
+### Jogos filtrados: on_the_rise
+GET {{base}}/casino/games?type=on_the_rise
+
+###
+
+### Jogos filtrados: live_dealer
+GET {{base}}/casino/games?type=live_dealer
+
+###
+
+### URL de um jogo (requer token)
+POST {{base}}/pragmatic/game-url
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "symbol": "wc26_golden_boot"
+}

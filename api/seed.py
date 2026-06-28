@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 from infrastructure.database.session import AsyncSessionLocal
 from infrastructure.database.models.user import User
 from infrastructure.database.models.sport_event import SportEvent, Market, Odd
+from infrastructure.database.models.casino_game import CasinoGame
 from domain.services.auth_rules import hash_password
 import infrastructure.repositories.user_repository as user_repo
 import infrastructure.repositories.event_repository as event_repo
+import infrastructure.repositories.casino_repository as casino_repo
 
 
 async def seed_demo_user() -> None:
@@ -534,3 +536,52 @@ async def seed_sport_events() -> None:
 
         await db.commit()
         print("seed: eventos esportivos criados com mercados e odds")
+
+
+async def seed_casino_games() -> None:
+    games_data = [
+        {"name": "Golden Boot — Copa 2026", "game_code": "wc26_golden_boot", "desktop_id": "wc26_golden_boot", "mobile_id": "wc26_golden_boot", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": True, "news": "true", "on_the_rise": "true"},
+        {"name": "Hat Trick Fever", "game_code": "wc26_hat_trick", "desktop_id": "wc26_hat_trick", "mobile_id": "wc26_hat_trick", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": True, "news": None, "on_the_rise": "true"},
+        {"name": "Penalty King", "game_code": "wc26_penalty_king", "desktop_id": "wc26_penalty_king", "mobile_id": "wc26_penalty_king", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": True, "news": None, "on_the_rise": None},
+        {"name": "Stadium Wild Megaways", "game_code": "wc26_stadium_wild", "desktop_id": "wc26_stadium_wild", "mobile_id": "wc26_stadium_wild", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": True, "demo": False, "news": "true", "on_the_rise": None},
+        {"name": "World Cup Spin", "game_code": "wc26_world_cup_spin", "desktop_id": "wc26_world_cup_spin", "mobile_id": "wc26_world_cup_spin", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": "true"},
+        {"name": "Golazo! Bonanza", "game_code": "wc26_golazo", "desktop_id": "wc26_golazo", "mobile_id": "wc26_golazo", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": None},
+        {"name": "USA — Canada — México Slots", "game_code": "wc26_us_canada_mx", "desktop_id": "wc26_us_canada_mx", "mobile_id": "wc26_us_canada_mx", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": False, "news": "true", "on_the_rise": None},
+        {"name": "Final Whistle Jackpot", "game_code": "wc26_final_whistle", "desktop_id": "wc26_final_whistle", "mobile_id": "wc26_final_whistle", "provider": "RosaBet Studios", "type": "slot", "game_image": "/cassino.png", "highlights": False, "demo": False, "news": None, "on_the_rise": "true"},
+        {"name": "Copa Roulette VIP", "game_code": "wc26_roulette_vip", "desktop_id": "wc26_roulette_vip", "mobile_id": "wc26_roulette_vip", "provider": "RosaBet Studios", "type": "roulette", "game_image": "/cassino.png", "highlights": True, "demo": False, "news": None, "on_the_rise": None},
+        {"name": "Roleta Clássica Copa 26", "game_code": "wc26_roulette_classic", "desktop_id": "wc26_roulette_classic", "mobile_id": "wc26_roulette_classic", "provider": "RosaBet Studios", "type": "roulette", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": "true"},
+        {"name": "Live Blackjack Copa 2026", "game_code": "wc26_live_blackjack", "desktop_id": "wc26_live_blackjack", "mobile_id": "wc26_live_blackjack", "provider": "RosaBet Studios", "type": "live_dealer", "game_image": "/cassino.png", "highlights": True, "demo": False, "news": "true", "on_the_rise": None},
+        {"name": "Baccarat ao Vivo — Copa", "game_code": "wc26_live_baccarat", "desktop_id": "wc26_live_baccarat", "mobile_id": "wc26_live_baccarat", "provider": "RosaBet Studios", "type": "live_dealer", "game_image": "/cassino.png", "highlights": False, "demo": False, "news": None, "on_the_rise": "true"},
+        {"name": "Bingo da Torcida", "game_code": "wc26_bingo_torcida", "desktop_id": "wc26_bingo_torcida", "mobile_id": "wc26_bingo_torcida", "provider": "RosaBet Studios", "type": "bingo", "game_image": "/cassino.png", "highlights": False, "news": "true", "on_the_rise": None},
+        {"name": "Bingo do Gol", "game_code": "wc26_bingo_gol", "desktop_id": "wc26_bingo_gol", "mobile_id": "wc26_bingo_gol", "provider": "RosaBet Studios", "type": "bingo", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": "true"},
+        {"name": "Poker dos Campeões", "game_code": "wc26_poker_champions", "desktop_id": "wc26_poker_champions", "mobile_id": "wc26_poker_champions", "provider": "RosaBet Studios", "type": "table", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": None},
+        {"name": "Blackjack MVP", "game_code": "wc26_blackjack_mvp", "desktop_id": "wc26_blackjack_mvp", "mobile_id": "wc26_blackjack_mvp", "provider": "RosaBet Studios", "type": "table", "game_image": "/cassino.png", "highlights": False, "demo": False, "news": "true", "on_the_rise": None},
+        {"name": "Penalty Shootout Rush", "game_code": "wc26_penalty_shootout", "desktop_id": "wc26_penalty_shootout", "mobile_id": "wc26_penalty_shootout", "provider": "RosaBet Studios", "type": "casual", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": "true"},
+        {"name": "Free Kick Frenzy", "game_code": "wc26_free_kick", "desktop_id": "wc26_free_kick", "mobile_id": "wc26_free_kick", "provider": "RosaBet Studios", "type": "casual", "game_image": "/cassino.png", "highlights": False, "news": "true", "on_the_rise": None},
+        {"name": "Raspa e Vence — Troféu", "game_code": "wc26_scratch_trofeu", "desktop_id": "wc26_scratch_trofeu", "mobile_id": "wc26_scratch_trofeu", "provider": "RosaBet Studios", "type": "scratch_card", "game_image": "/cassino.png", "highlights": False, "news": "true", "on_the_rise": None},
+        {"name": "Raspa a Camisa", "game_code": "wc26_scratch_camisa", "desktop_id": "wc26_scratch_camisa", "mobile_id": "wc26_scratch_camisa", "provider": "RosaBet Studios", "type": "scratch_card", "game_image": "/cassino.png", "highlights": False, "news": None, "on_the_rise": "true"},
+    ]
+
+    async with AsyncSessionLocal() as db:
+        created = 0
+        for data in games_data:
+            if await casino_repo.exists_by_game_code(db, data["game_code"]):
+                continue
+            db.add(CasinoGame(
+                name=data["name"],
+                game_code=data["game_code"],
+                desktop_id=data["desktop_id"],
+                mobile_id=data["mobile_id"],
+                provider=data["provider"],
+                type=data["type"],
+                game_image=data.get("game_image"),
+                active=True,
+                demo=data.get("demo", True),
+                highlights=data.get("highlights", False),
+                news=data.get("news"),
+                on_the_rise=data.get("on_the_rise"),
+            ))
+            created += 1
+        if created:
+            await db.commit()
+            print(f"seed: {created} jogos de cassino criados")
