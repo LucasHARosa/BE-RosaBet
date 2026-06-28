@@ -23,7 +23,6 @@ def fluctuate_odd(current: float, is_live: bool, minute: int = 0) -> float:
 def generate_correlated_odds(odds: list[dict], is_live: bool, minute: int = 0) -> list[dict]:
     """
     Varia um conjunto de odds de um mercado mantendo margem da casa ~7%.
-    Se uma odd cai, as demais sobem proporcionalmente para manter o equilíbrio.
     Cada dict deve ter: {"odd_id": str, "value": float}
     Retorna lista com {"odd_id": str, "value": float, "prev_value": float}
     """
@@ -33,17 +32,17 @@ def generate_correlated_odds(odds: list[dict], is_live: bool, minute: int = 0) -
         updated.append({**o, "prev_value": float(o["value"]), "value": new_val})
 
     # normaliza para manter margem da casa ~7%
-    # soma das probs implícitas deve ser ~1.07 (não 1.0)
+    # sum(1/odd_i) deve ser ~1.07
+    # se new_odd_i = old_odd_i * f, então sum(1/new_odd_i) = total_prob / f
+    # para sum(1/new_odd_i) = target → f = total_prob / target
     target_overround = 1.07
     total_prob = sum(1.0 / o["value"] for o in updated)
     if total_prob > 0:
-        scale = target_overround / total_prob
-        # se scale está muito longe de 1 (odds colapsaram), aplica só 20% da correção
-        # para evitar que a normalização empurre valores abaixo do mínimo
-        if scale < 0.5 or scale > 2.0:
-            scale = 1.0 + (scale - 1.0) * 0.2
+        scale = total_prob / target_overround
+        # limita a correção a ±20% por ciclo para evitar saltos bruscos
+        scale = max(0.8, min(1.2, scale))
         for o in updated:
             o["value"] = round(o["value"] * scale, 2)
-            o["value"] = max(1.01, o["value"])
+            o["value"] = max(1.01, min(30.0, o["value"]))
 
     return updated

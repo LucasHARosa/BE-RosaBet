@@ -1,24 +1,48 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, model_serializer
+from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
 
 
 class BetItemRequest(BaseModel):
     enet_code: str
-    market_id: int
-    odd_id: str
+    market_id: int = 0
+    odd_id: str = ""
     option_id: str
     quotation: float
     is_live: bool = False
     specifier: dict | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise(cls, v: dict) -> dict:
+        # frontend sends "oddId" instead of "odd_id"
+        if "oddId" in v and not v.get("odd_id"):
+            v["odd_id"] = v["oddId"]
+        # derive market_id from odd_id ("186::1" → 186) if not provided
+        if not v.get("market_id") and v.get("odd_id"):
+            try:
+                v["market_id"] = int(str(v["odd_id"]).split("::")[0])
+            except (ValueError, IndexError):
+                v["market_id"] = 0
+        return v
+
 
 class BetRequest(BaseModel):
     value: float
-    spend_from: str = "credits"
+    spend_from: str = "wallet"
     accept_all_changes: bool = False
     only_accept_high: bool = False
     sports: list[BetItemRequest]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise(cls, v: dict) -> dict:
+        # frontend sends different field names
+        if "accept_all_odds_change" in v:
+            v.setdefault("accept_all_changes", v["accept_all_odds_change"])
+        if "only_accept_high_odds_change" in v:
+            v.setdefault("only_accept_high", v["only_accept_high_odds_change"])
+        return v
 
 
 class BetItemResponse(BaseModel):
