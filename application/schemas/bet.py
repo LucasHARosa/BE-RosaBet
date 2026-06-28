@@ -29,7 +29,7 @@ class BetItemRequest(BaseModel):
 
 class BetRequest(BaseModel):
     value: float
-    spend_from: str = "wallet"
+    spend_from: str = "credits"
     accept_all_changes: bool = False
     only_accept_high: bool = False
     sports: list[BetItemRequest]
@@ -37,11 +37,13 @@ class BetRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalise(cls, v: dict) -> dict:
-        # frontend sends different field names
         if "accept_all_odds_change" in v:
             v.setdefault("accept_all_changes", v["accept_all_odds_change"])
         if "only_accept_high_odds_change" in v:
             v.setdefault("only_accept_high", v["only_accept_high_odds_change"])
+        # "wallet" is the frontend alias for the "credits" column on the User model
+        if v.get("spend_from") == "wallet":
+            v["spend_from"] = "credits"
         return v
 
 

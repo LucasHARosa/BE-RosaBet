@@ -364,7 +364,23 @@ Cada evento chega via WebSocket no formato:
 }]
 ```
 
-### Mercados principais e seus IDs (Sportradar)
+### Formato do hash das odds
+
+O hash de cada odd segue o padrão `"{market_id}::{option_id}"`:
+
+| Exemplo de hash | market_id | option_id | Significado |
+|---|---|---|---|
+| `1::1` | 1 (1x2) | 1 | Time da casa vence |
+| `1::X` | 1 (1x2) | X | Empate |
+| `1::2` | 1 (1x2) | 2 | Time visitante vence |
+| `5::over` | 5 (Over/Under) | over | Acima do total |
+| `5::under` | 5 (Over/Under) | under | Abaixo do total |
+| `3::yes` | 3 (BTTS) | yes | Ambos marcam |
+| `10::1X` | 10 (Double Chance) | 1X | Casa ou empate |
+
+> **Importante:** o hash sozinho NÃO é único entre eventos. Dois jogos de futebol diferentes terão `hash = "1::1"` para a opção "time da casa vence". Para identificação única no carrinho de apostas, sempre combine `hash + enet_code`.
+
+### Mercados principais e seus IDs
 
 | ID | Nome | Opções | Categoria |
 |---|---|---|---|
@@ -376,68 +392,57 @@ Cada evento chega via WebSocket no formato:
 | 18 | Total goals | 0, 1, 2, 3, 4+ | GOALS |
 | 26 | Correct score | 0:0, 1:0, 0:1... | MAIN |
 | 29 | 1st half - 1x2 | 1, X, 2 | 1ST_2ND |
-| 68 | 1st half - over/under | over, under | 1ST_2ND |
 | 45 | 1x2 (1st half) | 1, X, 2 | 1ST_2ND |
+| 68 | 1st half - over/under | over, under | 1ST_2ND |
 | 136 | Total corners | over, under | CORNERS_CARDS |
 | 166 | Total bookings | over, under | CORNERS_CARDS |
+| 186 | Match Winner (basket) | 1, 2 | MAIN |
+| 219 | Match Winner (tênis) | 1, 2 | MAIN |
 
 ### Flutuação de Odds — Algoritmo
 
-```python
-# app/services/odds_service.py
+**Implementação real em `domain/services/odds_calculator.py`:**
 
+```python
 import random
 import math
 
-def fluctuate_odd(current: float, is_live: bool, event_minute: int) -> float:
-    """
-    Gera variação natural de odds com as seguintes regras:
-    - Variação máxima por ciclo: ±3% em pré-jogo, ±6% ao vivo
-    - Odds extremamente baixas (<1.15) raramente sobem
-    - Odds altas (>5.0) têm maior volatilidade
-    - Próximo ao fim da partida, odds dominantes caem mais
-    """
-    base_volatility = 0.06 if is_live else 0.03
+def fluctuate_odd(current: float, is_live: bool, minute: int = 0) -> float:
+    base_volatility = 0.008 if is_live else 0.002   # ao vivo oscila 4× mais
 
-    # volatilidade sobe no final da partida
-    if is_live and event_minute > 75:
-        base_volatility *= 1.5
+    if is_live and minute > 75:
+        base_volatility *= 1.5                        # mais volátil no fim da partida
 
-    # volatilidade proporcional à odd (odds altas oscilam mais)
-    volatility = base_volatility * math.log(current + 1)
-
-    # variação aleatória com tendência de reversão à média
+    volatility = base_volatility * math.log(current + 1)  # odds altas oscilam mais
     delta = random.gauss(0, volatility)
+    delta = max(-0.05, min(0.05, delta))              # trava variação máxima por ciclo
 
-    # limitar variação
-    delta = max(-0.20, min(0.20, delta))
-
-    new_value = round(current + delta, 2)
-
-    # odds nunca abaixo de 1.01 nem acima de 100
-    return max(1.01, min(100.0, new_value))
+    return max(1.01, min(100.0, round(current + delta, 2)))
 
 
-def generate_correlated_odds(market_odds: list[dict], is_live: bool, minute: int) -> list[dict]:
-    """
-    Varia as odds de um mercado mantendo a margem da casa (~5-8%).
-    Se uma odd cai, as outras sobem proporcionalmente.
-    """
+def generate_correlated_odds(odds: list[dict], is_live: bool, minute: int = 0) -> list[dict]:
     updated = []
-    for odd in market_odds:
-        new_value = fluctuate_odd(odd["value"], is_live, minute)
-        updated.append({**odd, "value": new_value, "prev_value": odd["value"]})
+    for o in odds:
+        new_val = fluctuate_odd(float(o["value"]), is_live, minute)
+        updated.append({**o, "prev_value": float(o["value"]), "value": new_val})
 
-    # normalizar para manter margem da casa
-    total_prob = sum(1 / o["value"] for o in updated)
-    margin = 1.07  # 7% de margem
+    # normaliza para manter margem da casa ~7%
+    # sum(1/odd_i) deve ser ≈ 1.07
+    # Relação: se nova_odd_i = old_odd_i * scale, então sum(1/nova_odd_i) = total_prob / scale
+    # Para sum = target → scale = total_prob / target  (NÃO target / total_prob)
+    target_overround = 1.07
+    total_prob = sum(1.0 / o["value"] for o in updated)
     if total_prob > 0:
-        factor = (total_prob * margin) / total_prob
+        scale = total_prob / target_overround
+        scale = max(0.8, min(1.2, scale))   # limita a ±20% por ciclo
         for o in updated:
-            o["value"] = round(o["value"] / factor, 2)
+            o["value"] = round(o["value"] * scale, 2)
+            o["value"] = max(1.01, min(30.0, o["value"]))  # hard cap por odd
 
     return updated
 ```
+
+> **Atenção na fórmula de normalização:** o scale é `total_prob / target` (não `target / total_prob`). Multiplicar a odd por `f > 1` reduz sua probabilidade implícita de `1/odd` para `1/(odd*f)`, que é o comportamento correto. A fórmula invertida causaria um loop de retroalimentação onde as odds sobem indefinidamente a cada ciclo.
 
 ### Job de Flutuação (APScheduler)
 
@@ -472,47 +477,80 @@ async def place_bet(user_id: str, bet_data: BetRequest, db: AsyncSession):
     items = []
 
     for selection in bet_data.sports:
-        # busca a odd ATUAL no momento do clique
-        odd = await odd_repository.get_by_odd_id(db, selection.odd_id)
+        # busca a odd ATUAL no banco — filtro duplo (odd_id + event_id) evita colisão
+        # entre eventos que compartilham o mesmo hash (ex: "1::1" aparece em todo futebol)
+        odd = await odd_repository.get_by_odd_id_and_event(db, selection.odd_id, event.id)
 
         if not odd or not odd.active:
-            raise BetError("Odd indisponível")
+            raise BetError("Odd indisponível", code=1040)
 
-        # verifica se a odd mudou desde que o usuário visualizou
         if not bet_data.accept_all_changes:
             if odd.value < selection.quotation and not bet_data.only_accept_high:
                 raise BetError("Odd diminuiu", code=1050)
 
-        # TRAVA a cotação no momento da aposta
+        # TRAVA a cotação no momento da aposta (independe do valor enviado pelo frontend)
         locked_quotation = odd.value
         total_quotation *= locked_quotation
-
-        items.append(BetItem(
-            event_id=...,
-            enet_code=selection.enet_code,
-            market_id=selection.market_id,
-            odd_id=selection.odd_id,
-            option_id=selection.option_id,
-            quotation=locked_quotation,      # cotação travada aqui
-            is_live=selection.is_live,
-            specifier=selection.specifier,
-            status="OPENED"
-        ))
-
-    return_value = round(bet_data.value * total_quotation, 2)
-
-    bet = Bet(
-        user_id=user_id,
-        value=bet_data.value,
-        return_value=return_value,
-        extracted_quotation=round(total_quotation, 4),
-        status="OPENED",
         ...
-    )
-    # debita saldo do usuário
+
+    # debita do campo correto do usuário (credits | sports_bonus | casino_credits)
+    # O frontend envia spend_from="wallet" — o model_validator mapeia para "credits"
     await user_repository.debit(db, user_id, bet_data.value, bet_data.spend_from)
     ...
 ```
+
+### Normalização de campos do frontend (`application/schemas/bet.py`)
+
+O frontend envia campos com nomes diferentes dos campos do banco. O `model_validator(mode="before")` normaliza antes da validação Pydantic:
+
+```python
+class BetItemRequest(BaseModel):
+    enet_code: str
+    market_id: int = 0
+    odd_id: str = ""
+    option_id: str
+    quotation: float
+    is_live: bool = False
+    specifier: dict | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise(cls, v: dict) -> dict:
+        if "oddId" in v and not v.get("odd_id"):
+            v["odd_id"] = v["oddId"]                      # frontend envia "oddId"
+        if not v.get("market_id") and v.get("odd_id"):
+            v["market_id"] = int(str(v["odd_id"]).split("::")[0])  # "5::over" → 5
+        return v
+
+
+class BetRequest(BaseModel):
+    value: float
+    spend_from: str = "credits"
+    accept_all_changes: bool = False
+    only_accept_high: bool = False
+    sports: list[BetItemRequest]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise(cls, v: dict) -> dict:
+        if "accept_all_odds_change" in v:
+            v.setdefault("accept_all_changes", v["accept_all_odds_change"])
+        if "only_accept_high_odds_change" in v:
+            v.setdefault("only_accept_high", v["only_accept_high_odds_change"])
+        if v.get("spend_from") == "wallet":
+            v["spend_from"] = "credits"  # "wallet" é alias do frontend para o campo "credits" do User
+        return v
+```
+
+A resposta também é remapeada para o formato que o frontend consome:
+
+| Campo no banco | Campo enviado ao frontend |
+|---|---|
+| `id` | `_id` |
+| `value` | `amount` |
+| `extracted_quotation` | `total_odd` |
+| `return_value` | `potential_gain` |
+| `items` | `selections` |
 
 ---
 
