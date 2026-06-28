@@ -1,72 +1,122 @@
-# RosaBet API
+# RosaBet API — Backend
 
-Backend da plataforma RosaBet — FastAPI + PostgreSQL + Redis.
-
-## Pré-requisitos
-
-- macOS com [Homebrew](https://brew.sh) instalado
-- Python 3.12 (instalado via pyenv, instruções abaixo)
-- Git
+> API do backend da plataforma de apostas esportivas e cassino RosaBet.
 
 ---
 
-## 1. Clonar o repositório
+## O que é
 
-```bash
-git clone https://github.com/seu-usuario/rosabet-api.git
-cd rosabet-api
-```
+RosaBet API é o backend que alimenta a plataforma de apostas. Construído em FastAPI com arquitetura limpa, oferece:
 
----
-
-## 2. Instalar o Python 3.12
-
-```bash
-# instalar o pyenv (gerenciador de versões do Python)
-brew install pyenv
-
-# adicionar ao shell (cole no terminal e reabra o terminal depois)
-echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
-echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
-echo 'eval "$(pyenv init -)"' >> ~/.zshrc
-source ~/.zshrc
-
-# instalar o Python 3.12.4
-pyenv install 3.12.4
-```
-
-O arquivo `.python-version` na raiz do projeto faz o pyenv usar automaticamente a versão correta dentro da pasta.
+- Autenticação JWT com cadastro e login
+- Apostas esportivas com cotação travada no momento do clique
+- Odds ao vivo via WebSocket, variando automaticamente a cada 5 segundos
+- Liquidação automática de apostas ao fim de cada partida
+- Cassino com 20 jogos seedados por categoria
+- Depósito PIX simulado com confirmação automática e bônus de boas-vindas
 
 ---
 
-## 3. Criar e ativar o virtualenv
+## Como rodar
+
+**Pré-requisitos:** Python 3.12, PostgreSQL 16, Redis
 
 ```bash
+# 1. Criar e ativar o virtualenv
 python -m venv .venv
 source .venv/bin/activate
-```
 
-Você vai ver `(.venv)` no início do terminal quando estiver ativo.
-
----
-
-## 4. Instalar as dependências
-
-```bash
+# 2. Instalar dependências
 pip install -r requirements.txt
+
+# 3. Configurar variáveis de ambiente
+cp .env.example .env   # edite conforme necessário
+
+# 4. Subir banco e Redis (via Docker)
+make up
+
+# 5. Criar as tabelas
+make migrate
+
+# 6. Subir a API
+make dev
+```
+
+A API sobe em `http://localhost:8000` com reload automático.
+
+> Ao subir em `ENVIRONMENT=development`, um usuário demo é criado automaticamente:
+> **email:** `demo@rosabet.com` | **senha:** `demo123` | **saldo:** R$ 1.000,00
+
+---
+
+### Fluxo diário
+
+```bash
+make up      # sobe PostgreSQL + Redis via Docker
+make dev     # sobe a API (precisa do virtualenv ativo)
+make down    # para os containers ao terminar
 ```
 
 ---
 
-## 5. Configurar o arquivo .env
+## Estrutura de pastas
 
-Crie um arquivo `.env` na raiz do projeto:
-
-```bash
-cp .env.example .env
+```
+BE-RosaBet/
+├── api/                        # Camada HTTP: routers, WebSocket, dependências
+│   ├── routers/                # Endpoints organizados por domínio
+│   ├── websocket/              # Endpoint WS + ConnectionManager
+│   ├── dependencies.py         # get_db, get_current_user
+│   ├── seed.py                 # Dados iniciais (demo user, eventos, jogos)
+│   └── main.py                 # App FastAPI, CORS, lifespan
+│
+├── application/                # Casos de uso e schemas
+│   ├── use_cases/              # Orquestração de regras + repositórios
+│   └── schemas/                # Modelos Pydantic de request/response
+│
+├── domain/                     # Regras de negócio puras (sem I/O)
+│   └── services/               # Cálculo de odds, avaliação de resultados, auth
+│
+├── infrastructure/             # Adaptadores externos
+│   ├── database/               # SQLAlchemy models + sessão async
+│   ├── repositories/           # Queries SQL por entidade
+│   └── redis/                  # Conexão e pub/sub
+│
+├── worker/                     # Jobs em background
+│   ├── odds_job.py             # Varia odds a cada 5s e publica no Redis
+│   └── result_job.py           # Liquida apostas ao fim de cada partida
+│
+├── alembic/                    # Migrations do banco
+├── requests/                   # Arquivo .http para testar no VSCode (REST Client)
+├── config.py                   # Settings via .env (pydantic-settings)
+└── requirements.txt
 ```
 
-> Se não existir `.env.example`, crie o `.env` manualmente:
+---
+
+## Rotas disponíveis
+
+| Método | Rota | Auth | Descrição |
+|---|---|---|---|
+| POST | `/auth/login` | — | Login |
+| GET | `/user/me` | Bearer | Perfil do usuário |
+| POST | `/client` | — | Cadastro |
+| GET | `/sport/open` | — | Eventos abertos |
+| POST | `/bet` | Bearer | Criar aposta |
+| GET | `/bet` | Bearer | Listar apostas |
+| GET | `/bet/{id}` | Bearer | Detalhe de aposta |
+| POST | `/deposit` | Bearer | Criar depósito PIX |
+| GET | `/deposit` | Bearer | Listar depósitos |
+| GET | `/deposit-welcome-verification` | Bearer | Verificar bônus |
+| GET | `/casino/games_type` | — | Jogos agrupados |
+| GET | `/casino/games` | — | Listar jogos |
+| POST | `/pragmatic/game-url` | Bearer | URL do jogo |
+| WS | `/ws?channel=events_sports` | — | Lista de eventos ao vivo |
+| WS | `/ws?channel=events_sports_markets` | — | Odds de uma partida |
+
+---
+
+## Variáveis de ambiente
 
 ```env
 DATABASE_URL=postgresql+asyncpg://rosabet:rosabet123@localhost:5432/rosabet
@@ -80,272 +130,34 @@ ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
 ---
 
-## 6. Subir o banco e o Redis
-
-Escolha **uma** das duas opções abaixo. Ambas deixam PostgreSQL na porta 5432 e Redis na porta 6379 — o resto do projeto funciona igual.
-
----
-
-### Opção A — Docker (recomendado)
-
-Banco e Redis rodam em containers, sem instalar nada diretamente no Mac.
-
-**Instale o Docker Desktop:**
-
-Baixe em [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) e confirme que está funcionando:
-
-```bash
-docker --version
-docker compose version
-```
-
-**Suba os containers:**
-
-```bash
-make up
-```
-
-Os dados ficam em volumes — você pode parar e subir novamente sem perder nada.
-
-**Como parar:**
-
-```bash
-make down        # para os containers (mantém os dados)
-make reset       # para E apaga tudo (reset completo)
-```
-
-**Fluxo diário com Docker:**
-
-```bash
-make up      # subir banco + Redis
-make dev     # subir a API
-# Ctrl+C para parar a API
-make down    # parar banco + Redis
-```
-
----
-
-### Opção B — Homebrew (nativo no Mac)
-
-PostgreSQL e Redis instalados diretamente no macOS via brew. Sem Docker.
-
-**Instalar PostgreSQL 16:**
-
-```bash
-brew install postgresql@16
-
-# adicionar ao PATH (necessário uma vez)
-echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# iniciar o serviço
-brew services start postgresql@16
-```
-
-**Criar o banco e o usuário:**
-
-```bash
-psql postgres -c "CREATE USER rosabet WITH PASSWORD 'rosabet123';"
-psql postgres -c "CREATE DATABASE rosabet OWNER rosabet;"
-```
-
-**Instalar Redis:**
-
-```bash
-brew install redis
-brew services start redis
-```
-
-**Verificar que está tudo rodando:**
-
-```bash
-brew services list
-```
-
-Você deve ver `postgresql@16` e `redis` com status `started`.
-
-**Como parar:**
-
-```bash
-brew services stop postgresql@16
-brew services stop redis
-```
-
-> Com brew, os serviços sobem automaticamente toda vez que você liga o Mac. Se não quiser isso, pare com `brew services stop` ao terminar e inicie manualmente com `brew services start` quando precisar.
-
-**Fluxo diário com Homebrew:**
-
-```bash
-brew services start postgresql@16   # se não estiver rodando
-brew services start redis            # se não estiver rodando
-source .venv/bin/activate
-make dev
-# Ctrl+C para parar a API
-```
-
----
-
-## 7. Rodar as migrations (criar as tabelas)
-
-```bash
-make migrate
-```
-
-Cria as 8 tabelas: `users`, `sport_events`, `markets`, `odds`, `bets`, `bet_items`, `transactions`, `casino_games`.
-
-> Rode isso **uma vez** ao clonar o projeto. Só rode novamente quando houver novas migrations.
-
----
-
-## 8. Subir a API
-
-```bash
-make dev
-```
-
-A API sobe em `http://localhost:8000` com reload automático — qualquer alteração em `.py` reinicia o servidor sozinho, igual ao `npm run start:dev` do NestJS.
-
-Para parar: **Ctrl+C** no terminal.
-
----
-
-## Conectar o frontend ao backend
-
-Para ver os eventos ao vivo no frontend, configure o `.env.local` do projeto **RosaBet** (Next.js):
-
-```env
-NEXT_PUBLIC_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_SOCKET_URL=ws://localhost:8000/ws
-```
-
-Com isso, o frontend vai:
-- Buscar dados de auth e cadastro no FastAPI (`/auth/login`, `/client`)
-- Receber eventos ao vivo via WebSocket (`ws://localhost:8000/ws?channel=events_sports`)
-- Receber mercados do detalhe de uma partida (`ws://localhost:8000/ws?channel=events_sports_markets`)
-
----
-
-## Comparativo entre as opções
-
-| | Docker (Opção A) | Homebrew (Opção B) |
-|---|---|---|
-| Instalação | Docker Desktop | brew install |
-| Sobe com o Mac | Não (por padrão) | Sim (brew services) |
-| Múltiplos projetos | Um compose por projeto | Um único PostgreSQL compartilhado |
-| Reset do banco | `make reset` | `dropdb` + `createdb` |
-| Mais próximo de produção | ✅ | ❌ |
-| Mais simples de debugar | ❌ | ✅ |
-
----
-
-## Estrutura do projeto
-
-```
-rosabet-api/
-├── api/                    # FastAPI: routers, websocket, dependencies
-├── worker/                 # APScheduler: jobs de odds e resultados
-├── application/            # Casos de uso e schemas Pydantic
-├── domain/                 # Regras de negócio puras (sem I/O)
-├── infrastructure/         # Banco de dados, repositories, Redis
-├── alembic/                # Migrations
-├── tests/                  # Testes por camada
-├── requests/               # Arquivo .http para REST Client (VSCode)
-├── config.py               # Settings via .env
-└── requirements.txt
-```
-
----
-
-## Testando as rotas (REST Client)
-
-Instale a extensão [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) no VSCode e abra o arquivo `requests/rosabet.http`. Clique em **Send Request** acima de qualquer requisição para executá-la.
-
----
-
-## Múltiplos projetos com PostgreSQL (Opção B — Homebrew)
-
-Você não precisa de uma instância separada do PostgreSQL por projeto. Um único processo serve todos:
-
-```bash
-psql postgres -c "CREATE USER outroprojeto WITH PASSWORD 'senha';"
-psql postgres -c "CREATE DATABASE outroprojeto OWNER outroprojeto;"
-```
-
-Cada projeto aponta para o seu banco no `.env`:
-```env
-DATABASE_URL=postgresql+asyncpg://outroprojeto:senha@localhost:5432/outroprojeto
-```
-
----
-
-## Deploy em produção
-
-### Opção A — Railway / Render (mais fácil, sem VPS)
-
-1. Crie conta em [railway.app](https://railway.app) ou [render.com](https://render.com)
-2. Conecte seu repositório GitHub
-3. Adicione os serviços PostgreSQL e Redis pelo painel (eles provisionam automaticamente)
-4. Configure as variáveis do `.env` nas configurações do projeto
-5. A cada `git push`, eles fazem o build e deploy automaticamente
-
-### Opção B — VPS com Docker (DigitalOcean, Fly.io, etc.)
-
-Na VPS, após instalar Docker:
-
-```bash
-git clone https://github.com/seu-usuario/rosabet-api.git
-cd rosabet-api
-cp .env.example .env
-# editar .env com credenciais de produção (SECRET_KEY forte, ENVIRONMENT=production)
-
-docker compose up -d
-alembic upgrade head
-```
-
----
-
-## Gerenciar portas
-
-```bash
-# ver se a porta 8000 está em uso
-lsof -i :8000
-
-# ver todas as portas em uso no momento
-lsof -i -P | grep LISTEN
-
-# matar o processo que estiver na porta 8000
-kill $(lsof -ti:8000)
-```
-
----
-
 ## Comandos úteis
 
 ```bash
-# ativar virtualenv (sempre que abrir um novo terminal)
-source .venv/bin/activate
-
-# gerar nova migration após alterar um model
-make migration msg="descricao da mudanca"
-
-# aplicar migrations pendentes
-make migrate
-
-# acessar o banco via terminal (Docker)
-make psql
-
-# acessar o banco via terminal (Homebrew)
-psql rosabet
-
-# ver status dos containers (Docker)
-make status
-
-# ver logs dos containers (Docker)
-make logs
-
-# voltar uma migration
-source .venv/bin/activate && alembic downgrade -1
-
-# ver migrations aplicadas
-source .venv/bin/activate && alembic history
+make dev                          # sobe a API com reload
+make up                           # sobe PostgreSQL + Redis
+make down                         # para os containers
+make reset                        # para e apaga tudo (reset completo)
+make migrate                      # aplica migrations pendentes
+make migration msg="descricao"    # gera nova migration
+make psql                         # acessa o banco via terminal
+make status                       # status dos containers
+make logs                         # logs dos containers
 ```
+
+---
+
+## Stack técnica
+
+| Componente | Tecnologia |
+|---|---|
+| Framework | FastAPI |
+| ORM | SQLAlchemy 2.0 (async) |
+| Banco de dados | PostgreSQL 16 |
+| Migrations | Alembic |
+| Cache / Pub-Sub | Redis 7 |
+| Auth | JWT (python-jose) + bcrypt (passlib) |
+| Validação | Pydantic v2 |
+| WebSocket | FastAPI nativo |
+| Background jobs | asyncio tasks + APScheduler |
+| Servidor | Uvicorn |
+| Infra local | Docker Compose |
