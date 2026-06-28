@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from sqlalchemy import delete
+
 from infrastructure.database.session import AsyncSessionLocal
 from infrastructure.database.models.user import User
 from infrastructure.database.models.sport_event import SportEvent, Market, Odd
@@ -45,14 +47,16 @@ async def seed_sport_events() -> None:
             "country_en": "International",
             "home_team": "Brasil",
             "out_team": "Argentina",
+            "home_coa": "https://flagcdn.com/w80/br.svg",
+            "out_coa": "https://flagcdn.com/w80/ar.svg",
             "is_live": True,
             "status": "LIVE",
             "match_status": "1st Half",
-            "played_time": "23'",
-            "home_score": 1,
+            "played_time": "5'",
+            "home_score": 0,
             "away_score": 0,
-            "scheduled_at": now - timedelta(minutes=23),
-            "started_at": now - timedelta(minutes=23),
+            "scheduled_at": now - timedelta(minutes=5),
+            "started_at": now - timedelta(minutes=5),
             "markets": [
                 {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
                  "odds": [
@@ -88,14 +92,16 @@ async def seed_sport_events() -> None:
             "country_en": "England",
             "home_team": "Manchester City",
             "out_team": "Liverpool",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/364.png",
             "is_live": True,
             "status": "LIVE",
-            "match_status": "2nd Half",
-            "played_time": "67'",
-            "home_score": 2,
-            "away_score": 2,
-            "scheduled_at": now - timedelta(minutes=67),
-            "started_at": now - timedelta(minutes=67),
+            "match_status": "1st Half",
+            "played_time": "18'",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=18),
+            "started_at": now - timedelta(minutes=18),
             "markets": [
                 {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
                  "odds": [
@@ -125,14 +131,16 @@ async def seed_sport_events() -> None:
             "country_en": "United States",
             "home_team": "LA Lakers",
             "out_team": "Boston Celtics",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/nba/500/lal.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/nba/500/bos.png",
             "is_live": True,
             "status": "LIVE",
-            "match_status": "3rd Quarter",
-            "played_time": "3Q 5:42",
-            "home_score": 87,
-            "away_score": 79,
-            "scheduled_at": now - timedelta(minutes=50),
-            "started_at": now - timedelta(minutes=50),
+            "match_status": "1st Quarter",
+            "played_time": "1Q 8:30",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=10),
+            "started_at": now - timedelta(minutes=10),
             "markets": [
                 {"market_id": 219, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
                  "odds": [
@@ -156,14 +164,16 @@ async def seed_sport_events() -> None:
             "country_en": "Brazil",
             "home_team": "Flamengo",
             "out_team": "Palmeiras",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/1971.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/1963.png",
             "is_live": True,
             "status": "LIVE",
-            "match_status": "2nd Half",
-            "played_time": "51'",
-            "home_score": 1,
-            "away_score": 1,
-            "scheduled_at": now - timedelta(minutes=51),
-            "started_at": now - timedelta(minutes=51),
+            "match_status": "1st Half",
+            "played_time": "12'",
+            "home_score": 0,
+            "away_score": 0,
+            "scheduled_at": now - timedelta(minutes=12),
+            "started_at": now - timedelta(minutes=12),
             "markets": [
                 {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
                  "odds": [
@@ -199,14 +209,16 @@ async def seed_sport_events() -> None:
             "country_en": "Spain",
             "home_team": "Barcelona",
             "out_team": "Atlético de Madrid",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/83.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/1068.png",
             "is_live": True,
             "status": "LIVE",
-            "match_status": "2nd Half",
-            "played_time": "78'",
-            "home_score": 1,
+            "match_status": "1st Half",
+            "played_time": "22'",
+            "home_score": 0,
             "away_score": 0,
-            "scheduled_at": now - timedelta(minutes=78),
-            "started_at": now - timedelta(minutes=78),
+            "scheduled_at": now - timedelta(minutes=22),
+            "started_at": now - timedelta(minutes=22),
             "markets": [
                 {"market_id": 1, "name": "1x2", "name_pt": "Resultado Final", "category": "MAIN",
                  "odds": [
@@ -236,14 +248,16 @@ async def seed_sport_events() -> None:
             "country_en": "England",
             "home_team": "Carlos Alcaraz",
             "out_team": "Jannik Sinner",
+            "home_coa": "https://flagcdn.com/w80/es.svg",
+            "out_coa": "https://flagcdn.com/w80/it.svg",
             "is_live": True,
             "status": "LIVE",
-            "match_status": "2nd Set",
-            "played_time": "2S 4-3",
-            "home_score": 1,
+            "match_status": "1st Set",
+            "played_time": "1S 2-1",
+            "home_score": 0,
             "away_score": 0,
-            "scheduled_at": now - timedelta(minutes=75),
-            "started_at": now - timedelta(minutes=75),
+            "scheduled_at": now - timedelta(minutes=15),
+            "started_at": now - timedelta(minutes=15),
             "markets": [
                 {"market_id": 186, "name": "Match Winner", "name_pt": "Vencedor da Partida", "category": "MAIN",
                  "odds": [
@@ -270,6 +284,8 @@ async def seed_sport_events() -> None:
             "country_en": "France",
             "home_team": "Rafael Nadal",
             "out_team": "Novak Djokovic",
+            "home_coa": "https://flagcdn.com/w80/es.svg",
+            "out_coa": "https://flagcdn.com/w80/rs.svg",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -299,6 +315,8 @@ async def seed_sport_events() -> None:
             "country_en": "Europe",
             "home_team": "PSG",
             "out_team": "Real Madrid",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/160.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/86.png",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -335,6 +353,8 @@ async def seed_sport_events() -> None:
             "country_en": "Germany",
             "home_team": "Bayern de Munique",
             "out_team": "Borussia Dortmund",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/132.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/124.png",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -376,6 +396,8 @@ async def seed_sport_events() -> None:
             "country_en": "Brazil",
             "home_team": "Santos",
             "out_team": "Corinthians",
+            "home_coa": "https://flagcdn.com/w80/br.svg",
+            "out_coa": "https://flagcdn.com/w80/br.svg",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -417,6 +439,8 @@ async def seed_sport_events() -> None:
             "country_en": "United States",
             "home_team": "Golden State Warriors",
             "out_team": "Miami Heat",
+            "home_coa": "https://a.espncdn.com/i/teamlogos/nba/500/gs.png",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/nba/500/mia.png",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -446,6 +470,8 @@ async def seed_sport_events() -> None:
             "country_en": "Italy",
             "home_team": "Juventus",
             "out_team": "Inter de Milão",
+            "home_coa": "https://flagcdn.com/w80/it.svg",
+            "out_coa": "https://a.espncdn.com/i/teamlogos/soccer/500/110.png",
             "is_live": False,
             "status": "NOT_STARTED",
             "match_status": "Not started",
@@ -482,7 +508,48 @@ async def seed_sport_events() -> None:
 
     async with AsyncSessionLocal() as db:
         for data in events_data:
-            if await event_repo.get_by_enet_code(db, data["enet_code"]):
+            existing = await event_repo.get_by_enet_code(db, data["enet_code"])
+            if existing:
+                existing.scheduled_at = data["scheduled_at"]
+                existing.started_at = data.get("started_at")
+                existing.is_live = data["is_live"]
+                existing.status = data["status"]
+                existing.match_status = data.get("match_status")
+                existing.played_time = data.get("played_time")
+                existing.home_score = data.get("home_score", 0)
+                existing.away_score = data.get("away_score", 0)
+                existing.home_coats_of_arms = data.get("home_coa")
+                existing.out_coats_of_arms = data.get("out_coa")
+                existing.valid_odds = sum(len(m["odds"]) for m in data["markets"])
+                # delete stale markets/odds and re-create from seed
+                existing_market_ids = [m.id for m in existing.markets]
+                await db.execute(delete(Odd).where(Odd.market_id.in_(existing_market_ids)))
+                await db.execute(delete(Market).where(Market.event_id == existing.id))
+                for mdata in data["markets"]:
+                    market = Market(
+                        event_id=existing.id,
+                        market_id=mdata["market_id"],
+                        name=mdata["name"],
+                        name_pt=mdata.get("name_pt"),
+                        category=mdata.get("category", "MAIN"),
+                        specifier=mdata.get("specifier"),
+                        has_specifiers=mdata.get("has_specifiers", False),
+                    )
+                    db.add(market)
+                    await db.flush()
+                    for odata in mdata["odds"]:
+                        if mdata.get("specifier"):
+                            odd_id = f"{mdata['market_id']}::{mdata['specifier']}:{odata['option_id']}"
+                        else:
+                            odd_id = f"{mdata['market_id']}::{odata['option_id']}"
+                        db.add(Odd(
+                            market_id=market.id,
+                            event_id=existing.id,
+                            odd_id=odd_id,
+                            option_id=odata["option_id"],
+                            name=odata["name"],
+                            value=odata["value"],
+                        ))
                 continue
 
             event = SportEvent(
@@ -494,6 +561,8 @@ async def seed_sport_events() -> None:
                 country_en=data.get("country_en"),
                 home_team=data.get("home_team"),
                 out_team=data.get("out_team"),
+                home_coats_of_arms=data.get("home_coa"),
+                out_coats_of_arms=data.get("out_coa"),
                 is_live=data["is_live"],
                 status=data["status"],
                 match_status=data.get("match_status"),
@@ -535,7 +604,7 @@ async def seed_sport_events() -> None:
                     ))
 
         await db.commit()
-        print("seed: eventos esportivos criados com mercados e odds")
+        print("seed: eventos esportivos sincronizados (datas atualizadas)")
 
 
 async def seed_casino_games() -> None:
