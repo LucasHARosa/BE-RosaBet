@@ -1,8 +1,9 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.schemas.client import RegisterRequest, UserResponse
-from domain.services.auth_rules import hash_password
+from application.schemas.auth import RegisterResponse
+from application.schemas.client import RegisterRequest
+from domain.services.auth_rules import hash_password, create_access_token
 from infrastructure.database.models.user import User
 import infrastructure.repositories.user_repository as user_repo
 
@@ -11,7 +12,7 @@ class RegisterUseCase:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def execute(self, data: RegisterRequest) -> UserResponse:
+    async def execute(self, data: RegisterRequest) -> RegisterResponse:
         if await user_repo.get_by_email(self.db, data.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -40,4 +41,5 @@ class RegisterUseCase:
         )
 
         saved = await user_repo.create(self.db, user)
-        return UserResponse.model_validate(saved)
+        token = create_access_token(str(saved.id))
+        return RegisterResponse(token=token)

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_serializer
 
 
 class RegisterRequest(BaseModel):
@@ -62,12 +62,15 @@ class UpdateActiveRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     name: str
     username: str
     email: str
     cpf: str
-    phone: str | None
+    phone: str | None = None
+    birth_date: datetime | None = None
     type: str
     credits: float
     casino_credits: float
@@ -79,5 +82,28 @@ class UserResponse(BaseModel):
     notification_sms: bool
     notification_email: bool
     created_at: datetime
+    token: str | None = None
 
-    model_config = {"from_attributes": True}
+    @model_serializer
+    def to_frontend(self) -> dict:
+        return {
+            "_id": str(self.id),
+            "name": self.name,
+            "username": self.username,
+            "email": self.email,
+            "cpf": self.cpf,
+            "phone": self.phone,
+            "birthDate": self.birth_date.date().isoformat() if self.birth_date else None,
+            "type": self.type.lower(),
+            "credits": float(self.credits),
+            "casino_credits": float(self.casino_credits),
+            "sports_bonus": float(self.sports_bonus),
+            "retained_credit": float(self.retained_credit),
+            "currency": self.currency,
+            "email_confirmed": self.email_confirmed,
+            "active": self.active,
+            "notification_sms": self.notification_sms,
+            "notification_email": self.notification_email,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "token": self.token,
+        }

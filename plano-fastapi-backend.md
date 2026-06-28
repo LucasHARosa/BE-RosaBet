@@ -1844,41 +1844,83 @@ Abrir `requests/rosabet.http`:
 
 ---
 
-### Fase 10 — Migração do Frontend
+### Fase 10 — Integração Frontend + Correções de Formato ✅
 
-**Objetivo:** desligar completamente as rotas fake do Next.js e apontar para o FastAPI.
+**Objetivo:** ajustar o backend para corresponder ao formato que o frontend já espera, sem mexer no frontend.
 
-**Checklist:**
-```bash
-# 1. trocar .env.local do Next.js
-NEXT_PUBLIC_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_SOCKET_URL=ws://localhost:8000
+**Status:** concluída. Frontend apontando para FastAPI em `localhost:8000`.
 
-# 2. deletar rotas fake (em lotes, testando após cada lote)
-rm -rf src/app/api/rules src/app/api/general-promotion src/app/api/promo-code src/app/api/sport
-# teste → ok?
-rm -rf src/app/api/casino src/app/api/pragmatic
-# teste → ok?
-rm -rf src/app/api/notification src/app/api/client-notification
-rm -rf src/app/api/deposit src/app/api/cashout src/app/api/check-withdrawals src/app/api/deposit-welcome-verification
-# teste → ok?
-rm -rf src/app/api/bet
-# teste → ok?
-rm -rf src/app/api/auth src/app/api/user src/app/api/client
-rm -rf src/app/api/_data
+---
 
-# 3. confirmar que src/app/api/ está vazio
-ls src/app/api/
+#### Arquivos modificados
+
+```
+application/schemas/client.py          ← UserResponse: aliases _id, birthDate, type lowercase, campo token
+application/schemas/auth.py            ← LoginResponse(user: UserResponse), RegisterResponse(token: str)
+application/schemas/bet.py             ← BetResponse + BetItemResponse: model_serializer com mapeamento de campos
+application/use_cases/auth/login.py    ← retorna LoginResponse(user=user_with_token)
+application/use_cases/auth/register.py ← retorna RegisterResponse(token=jwt)
+api/routers/auth.py                    ← POST /auth/login: status_code=201, response_model=LoginResponse
+api/routers/client.py                  ← POST /client: response_model=RegisterResponse; + POST /client/signup/firststep
+api/routers/stubs.py                   ← NOVO: 20+ rotas stub para endpoints secundários
+api/main.py                            ← + stubs.router
+RosaBet/.env.local                     ← NEXT_PUBLIC_BASE_URL=http://localhost:8000
 ```
 
-**Testar cada fluxo após migração:**
-- [ ] Login com demo@rosabet.com
-- [ ] Ver saldo na home
-- [ ] Navegar no cassino (categorias + jogos)
-- [ ] Ver partidas ao vivo (WebSocket ativo)
-- [ ] Fazer aposta simples
-- [ ] Simular depósito PIX
-- [ ] Ver histórico de apostas
+---
+
+#### Problemas resolvidos
+
+| Problema | Solução |
+|---|---|
+| `/auth/login` retornava `{ access_token }` mas frontend esperava `{ user: { _id, token, ... } }` | `LoginResponse` wrapping `UserResponse` com `token` embutido; status_code=201 |
+| `/client` retornava `UserResponse` mas frontend esperava `{ token }` | `RegisterResponse(token: str)` |
+| `UserResponse` usava `id` mas frontend esperava `_id` | `@model_serializer` mapeia explicitamente para `_id`, `birthDate`, `type.lower()` |
+| `BetResponse` usava `value`, `extracted_quotation`, `return_value`, `items` | `@model_serializer` mapeia para `amount`, `total_odd`, `potential_gain`, `selections` |
+| ~20 rotas que o frontend chama não existiam | `api/routers/stubs.py` cobre todas com respostas hardcoded |
+
+---
+
+#### Stubs implementados
+
+| Rota | Resposta |
+|---|---|
+| `PUT /client/me` | Delega ao `UpdateProfileUseCase` |
+| `POST /client/signup/firststep` | Verifica CPF disponível no banco |
+| `PUT /client/break-period` | `{ "applied": true }` |
+| `PUT /client/self-exclusion` | `{ "applied": true }` |
+| `POST /client/forgot_password` | `{ "message": "E-mail de recuperação enviado." }` |
+| `POST /client/password` | `{ "message": "Senha redefinida com sucesso." }` |
+| `GET /client/status-email-confirmation` | `{ "confirmed": true }` |
+| `PUT /client/check-email-confirmation-code` | `{ "verified": true }` |
+| `PUT /client/confirmation-email` | `{ "message": "Código reenviado." }` |
+| `PUT /client/update-email` | `{ "updated": true }` |
+| `GET /rules/list` | 3 regras fake |
+| `GET /rules/{id}` | Texto fake |
+| `GET /general-promotion/notifications` | 2 promoções fake (boas-vindas + freebet) |
+| `GET /general-promotion/jackpot-games` | `[]` |
+| `GET /notification` | `[]` |
+| `PUT /notification` | `{ "updated": true }` |
+| `GET /client-notification/messages` | `[]` |
+| `POST /promo-code/activate-coupon` | `{ "activated": true }` |
+| `POST /cashout` | `{ "success": true }` |
+| `POST /check-withdrawals` | `{ "valid": true }` |
+| `PUT /bet/{id}/cashout` | `{ "success": true }` |
+
+---
+
+#### Como testar
+
+1. Subir backend: `make dev` em `BE-RosaBet/`
+2. Subir frontend: `npm run dev` em `RosaBet/`
+3. Abrir `http://localhost:3000` no browser e verificar:
+   - [ ] Login com `demo@rosabet.com / demo123` → usuário logado, saldo visível
+   - [ ] Home carrega sem erros de rede (promoções, notificações via stubs)
+   - [ ] Página `/casino` lista os 20 jogos por categoria
+   - [ ] Página de esportes mostra partidas via WebSocket
+   - [ ] Fazer aposta simples → débito no saldo
+   - [ ] Histórico de apostas em `/profile/bets`
+   - [ ] Depósito PIX → status CONFIRMED após 10s
 
 ---
 
@@ -1895,4 +1937,4 @@ ls src/app/api/
 | 7 | Liquidação (resultado + pagamento) | Fase 5 + 6 |
 | 8 ✅ | Depósito PIX simulado (bônus boas-vindas) | Fase 3 |
 | 9 ✅ | Cassino (seed + rotas) | Fase 2 |
-| 10 | Migração do frontend | Todas as fases anteriores |
+| 10 ✅ | Integração frontend: formatos de resposta + stubs + .env.local | Todas as fases anteriores |

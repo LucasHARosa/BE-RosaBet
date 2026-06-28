@@ -271,3 +271,49 @@ Content-Type: application/json
 {
   "symbol": "wc26_golden_boot"
 }
+
+
+# ==========================================
+# FASE 10 — Stubs e Verificações de Integração
+# ==========================================
+
+### Verificar elegibilidade de email (retorna confirmed: true)
+GET {{base}}/client/status-email-confirmation
+Authorization: Bearer {{token}}
+
+###
+
+### Verificar CPF disponível para cadastro
+POST {{base}}/client/signup/firststep
+Content-Type: application/json
+
+{
+  "cpf": "99988877766"
+}
+
+###
+
+### Notificações da home (retorna lista vazia)
+GET {{base}}/notification
+Authorization: Bearer {{token}}
+
+###
+
+### Promoções gerais (retorna boas-vindas + freebet)
+GET {{base}}/general-promotion/notifications
+
+###
+
+### Regras da plataforma
+GET {{base}}/rules/list
+
+###
+
+### Promoções de jackpot (retorna [])
+GET {{base}}/general-promotion/jackpot-games
+
+###
+
+### Mensagens do cliente (retorna [])
+GET {{base}}/client-notification/messages
+Authorization: Bearer {{token}}

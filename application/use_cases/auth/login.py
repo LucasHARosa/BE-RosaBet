@@ -1,7 +1,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.schemas.auth import LoginRequest, TokenResponse
+from application.schemas.auth import LoginRequest, LoginResponse
+from application.schemas.client import UserResponse
 from domain.services.auth_rules import verify_password, create_access_token
 import infrastructure.repositories.user_repository as user_repo
 
@@ -10,10 +11,9 @@ class LoginUseCase:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def execute(self, data: LoginRequest) -> TokenResponse:
+    async def execute(self, data: LoginRequest) -> LoginResponse:
         user = await user_repo.get_by_email(self.db, data.username)
 
-        # mensagem genérica intencional — não revelar se o email existe
         invalid = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": 1001, "message": "Email ou senha inválidos"},
@@ -39,4 +39,6 @@ class LoginUseCase:
             )
 
         token = create_access_token(str(user.id))
-        return TokenResponse(access_token=token)
+        user_response = UserResponse.model_validate(user)
+        user_with_token = user_response.model_copy(update={"token": token})
+        return LoginResponse(user=user_with_token)

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from api.routers import auth, client, sport, bet, deposit, casino
+from api.routers import auth, client, sport, bet, deposit, casino, stubs
 from api.websocket import sport_ws
 from api.seed import seed_demo_user, seed_sport_events, seed_casino_games
 from infrastructure.redis.client import connect as redis_connect, disconnect as redis_disconnect
@@ -53,6 +53,7 @@ app.include_router(sport.router)
 app.include_router(bet.router)
 app.include_router(deposit.router)
 app.include_router(casino.router)
+app.include_router(stubs.router)
 app.include_router(sport_ws.router)
 
 
